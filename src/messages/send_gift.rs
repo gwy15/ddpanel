@@ -34,10 +34,11 @@ impl super::ToPoint for SendGift {
                 .field("num", self.num as i64)
                 .field("price", self.price())
         } else {
-            Point::new("live-gold")
+            Point::new("live-gift")
                 .tag("type", "free")
+                .tag("gift_name", self.gift_name.as_str())
                 .field("num", self.num as i64)
-                .field("coint", self.price_milli as f64)
+                .field("coin", self.price_milli as f64)
         }
     }
 }
