@@ -3,3 +3,5 @@
 *.json
 *.py
 docker-compose.yml
+
+.env

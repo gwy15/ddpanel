@@ -4,16 +4,18 @@ extern crate serde;
 extern crate log;
 
 use anyhow::{bail, Result};
-use biliapi::Request;
+use biliapi::{ws_protocol::Packet, Request};
 use clap::Clap;
 use futures::StreamExt;
 use influxdb_client::{Client as InfluxClient, Precision};
-use std::time::{Duration, Instant};
+use std::{
+    path::PathBuf,
+    time::{Duration, Instant},
+};
+use tokio::sync::mpsc::Sender;
 
+mod handlers;
 mod messages;
-pub use messages::Message;
-
-mod process;
 
 #[derive(Debug, clap::Clap)]
 struct Opts {
@@ -43,17 +45,21 @@ struct Opts {
     )]
     influx_token: Option<String>,
 
-    #[clap(long = "org", short = 'o')]
+    #[clap(long = "org", short = 'o', default_value = "ddpanel")]
     influx_org: String,
 
-    #[clap(long = "bucket", short = 'b')]
+    #[clap(long = "bucket", short = 'b', default_value = "ddpanel")]
     influx_bucket: String,
+
+    #[clap(long = "file", short = 'f', default_value = "record-packets.json")]
+    file: PathBuf,
 }
 
 async fn start_live_monitor(
     long_room_id: u64,
     client: &reqwest::Client,
     influx: &InfluxClient,
+    tx: &Sender<Packet>,
 ) -> Result<()> {
     // 拿到弹幕数据
     let danmu_info = biliapi::requests::DanmuInfo::request(&client, long_room_id).await?;
@@ -65,7 +71,7 @@ async fn start_live_monitor(
     info!("room {} connected.", long_room_id);
     while let Some(msg) = connection.next().await {
         match msg {
-            Ok(msg) => process::on_packet(msg, long_room_id, influx).await?,
+            Ok(msg) => handlers::on_packet(msg, long_room_id, influx, tx).await?,
             Err(e) => {
                 error!("error: {:?}", e);
                 return Err(e.into());
@@ -79,6 +85,7 @@ async fn start_live_monitor_with_retry(
     room_id: u64,
     client: reqwest::Client,
     influx: InfluxClient,
+    tx: Sender<Packet>,
 ) -> Result<()> {
     info!("run_with_retry: room_id = {}", room_id);
     let room_info = biliapi::requests::InfoByRoom::request(&client, room_id).await?;
@@ -88,7 +95,7 @@ async fn start_live_monitor_with_retry(
     let mut err_counter = 0;
     static ALLOW_FAIL_DURATION: Duration = Duration::from_secs(5 * 60);
     loop {
-        match start_live_monitor(long_room_id, &client, &influx).await {
+        match start_live_monitor(long_room_id, &client, &influx, &tx).await {
             Ok(_) => unreachable!(),
             Err(e) => {
                 warn!("发生错误：{:?}", e);
@@ -112,6 +119,7 @@ async fn start_live_monitor_with_retry(
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    dotenv::dotenv()?;
     pretty_env_logger::init();
 
     let opts = Opts::parse();
@@ -127,20 +135,25 @@ async fn main() -> Result<()> {
 
     let client = biliapi::connection::new_client()?;
 
-    let influx = InfluxClient::new(opts.influx_db_url, token)?
+    let influx_client = InfluxClient::new(opts.influx_db_url, token)?
         .with_org(opts.influx_org)
         .with_bucket(opts.influx_bucket)
         .with_precision(Precision::MS);
+
+    let (tx, rx) = tokio::sync::mpsc::channel::<Packet>(8 << 10);
+    tokio::spawn(handlers::start_file_appender(opts.file, rx));
 
     let mut handlers = vec![];
     for room_id in opts.room_ids {
         let handler = tokio::spawn(start_live_monitor_with_retry(
             room_id,
             client.clone(),
-            influx.clone(),
+            influx_client.clone(),
+            tx.clone(),
         ));
         handlers.push(handler);
     }
+    std::mem::drop(tx);
 
     let future = futures::future::join_all(handlers);
     let _results = future.await;

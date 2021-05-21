@@ -62,9 +62,9 @@ checksum = "904dfeac50f3cdaba28fc6f57fdcddb75f49ed61346676a78c4ffe55877802fd"
 
 [[package]]
 name = "biliapi"
-version = "0.1.4"
+version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7ceb43d777bf3951ec087379b8cd3b633790e69ea43e156c9a27b5a18b4cbda2"
+checksum = "aff6684070743100bd8ee1a566575973b29b2a640dd89cb54a5e70d6a9f1a5cf"
 dependencies = [
  "async-tungstenite",
  "byteorder",
@@ -88,6 +88,7 @@ dependencies = [
  "biliapi",
  "chrono",
  "clap",
+ "dotenv",
  "futures",
  "influxdb-client",
  "log",
@@ -215,6 +216,12 @@ checksum = "d3dd60d1080a57a05ab032377049e0591415d2b31afd7028356dbf3cc6dcb066"
 dependencies = [
  "generic-array",
 ]
+
+[[package]]
+name = "dotenv"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77c90badedccf4105eca100756a0b1289e191f6fcbdadd3cee1d2f614f97da8f"
 
 [[package]]
 name = "encoding_rs"
