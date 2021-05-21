@@ -5,3 +5,6 @@
 docker-compose.yml
 
 .env
+
+grafana
+influxdb

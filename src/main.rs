@@ -99,9 +99,11 @@ async fn start_live_monitor_with_retry(
             Ok(_) => unreachable!(),
             Err(e) => {
                 warn!("发生错误：{:?}", e);
-                if Instant::now().duration_since(last_time) > ALLOW_FAIL_DURATION {
+                if Instant::now().duration_since(last_time) < ALLOW_FAIL_DURATION {
+                    warn!("错误发生过于频繁！");
                     err_counter += 1;
                     if err_counter > 5 {
+                        error!("错误发生过于频繁！取消任务！");
                         return Err(e);
                     }
                 } else {
