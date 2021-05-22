@@ -1,3 +1,4 @@
+use crate::influx::RoomInfo;
 use chrono::{DateTime, Local};
 use influxdb_client::Point;
 use serde_json::Value;
@@ -13,9 +14,10 @@ pub struct SendMsgReply {
 pub trait ToPoint: Sized {
     fn into_basic_point(self) -> Point;
 
-    fn into_point(self, room_id: u64, t: DateTime<Local>) -> Point {
+    fn into_point(self, room_info: &RoomInfo, t: DateTime<Local>) -> Point {
         self.into_basic_point()
-            .tag("room_id", room_id as i64)
+            .tag("room_id", room_info.id as i64)
+            .tag("streamer", room_info.streamer.as_str())
             .timestamp(t.timestamp_millis())
     }
 }

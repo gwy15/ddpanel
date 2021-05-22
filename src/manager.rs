@@ -5,6 +5,7 @@ use std::{collections::HashMap, path::PathBuf};
 use anyhow::{bail, Result};
 use biliapi::ws_protocol::Packet;
 use influxdb_client::Client as InfluxClient;
+use parking_lot::RwLock;
 use tokio::sync::{broadcast, oneshot};
 
 use crate::{
@@ -13,6 +14,11 @@ use crate::{
     monitor::Monitor,
     task_factory::{TaskFactory, TaskSet},
 };
+
+// FIXME: 这是一个丑陋的打洞实现，需要修改为更好的实现
+lazy_static::lazy_static! {
+    pub static ref ROOM_ID_TO_STREAMER: RwLock<HashMap<u64, String>> = Default::default();
+}
 
 pub struct Manager {
     packet_channel: broadcast::Sender<Packet>,

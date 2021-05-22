@@ -60,6 +60,10 @@ impl TaskFactory {
 
         let rooms: HashMap<String, u64> = serde_json::from_str(&content)?;
 
-        Ok(rooms.values().cloned().collect())
+        Ok(rooms
+            .into_iter()
+            .filter(|(k, _v)| !k.starts_with('#'))
+            .map(|(_k, v)| v)
+            .collect())
     }
 }

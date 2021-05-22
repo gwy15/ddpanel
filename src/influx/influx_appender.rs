@@ -4,7 +4,7 @@ use chrono::{DateTime, Local};
 use influxdb_client::{Client as InfluxClient, TimestampOptions};
 use tokio::sync::{broadcast, oneshot};
 
-use super::messages::*;
+use super::{messages::*, RoomInfo};
 
 pub struct InfluxAppender {
     client: InfluxClient,
@@ -52,17 +52,22 @@ impl InfluxAppender {
     async fn process_packet(&mut self, packet: Packet) -> Result<()> {
         let t = packet.time;
         let room_id = packet.room_id;
+
         match packet.operation {
             Operation::Known(KnownOperation::SendMsgReply) => {
+                let room_info = RoomInfo::from_cache(room_id);
+
                 let msg = serde_json::from_str::<SendMsgReply>(&packet.body)
                     .context("转换 SendMsgReply 失败")?;
 
                 debug!("msg cmd: {}", msg.cmd);
-                self.on_send_msg_reply(msg, room_id, t).await
+                self.on_send_msg_reply(msg, &room_info, t).await
             }
             Operation::Known(KnownOperation::HeartbeatReply) => {
+                let room_info = RoomInfo::from_cache(room_id);
+
                 let popularity: i64 = packet.body.parse()?;
-                self.on_popularity(popularity, room_id, t).await
+                self.on_popularity(popularity, &room_info, t).await
             }
             _ => Ok(()),
         }
@@ -71,7 +76,7 @@ impl InfluxAppender {
     async fn on_send_msg_reply(
         &self,
         msg: SendMsgReply,
-        room_id: u64,
+        room_info: &RoomInfo,
         t: DateTime<Local>,
     ) -> Result<()> {
         let point = match msg.cmd.as_str() {
@@ -79,19 +84,19 @@ impl InfluxAppender {
                 let sc: SuperChat =
                     serde_json::from_value(msg.data).context("convert msg to super chat failed")?;
                 info!("sc: {:?}", sc);
-                sc.into_point(room_id, t)
+                sc.into_point(room_info, t)
             }
             "SEND_GIFT" => {
                 let gift: SendGift =
                     serde_json::from_value(msg.data).context("convert msg to send gift failed")?;
                 info!("gift: {:?}", gift);
-                gift.into_point(room_id, t)
+                gift.into_point(room_info, t)
             }
             "USER_TOAST_MSG" => {
                 let guard: UserToastMsg = serde_json::from_value(msg.data)
                     .context("convert msg to UserToastMsg failed.")?;
                 info!("guard buy: {:?}", guard);
-                guard.into_point(room_id, t)
+                guard.into_point(room_info, t)
             }
             "DANMU_MSG" => {
                 // TODO: 统计弹幕
@@ -105,10 +110,15 @@ impl InfluxAppender {
         Ok(())
     }
 
-    async fn on_popularity(&self, popularity: i64, room_id: u64, t: DateTime<Local>) -> Result<()> {
+    async fn on_popularity(
+        &self,
+        popularity: i64,
+        room_info: &RoomInfo,
+        t: DateTime<Local>,
+    ) -> Result<()> {
         let p = Popularity::new(popularity);
         info!("room popularity: {:?}", p);
-        let point = p.into_point(room_id, t);
+        let point = p.into_point(room_info, t);
         self.client
             .insert_points(&[point], TimestampOptions::FromPoint)
             .await?;

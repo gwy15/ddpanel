@@ -5,6 +5,8 @@ use reqwest::Client as HttpClient;
 use std::time::{Duration, Instant};
 use tokio::sync::{broadcast, oneshot};
 
+use crate::influx::RoomInfo;
+
 static ALLOW_FAIL_DURATION: Duration = Duration::from_secs(5 * 60);
 
 pub struct Monitor {
@@ -43,9 +45,11 @@ impl Monitor {
         let room_info =
             biliapi::requests::InfoByRoom::request(&self.http_client, self.room_id).await?;
         let long_room_id = room_info.room_info.room_id;
+        let streamer = room_info.anchor_info.base.uname;
 
         let mut last_time = Instant::now();
         let mut err_counter = 0;
+        RoomInfo::write_cache(long_room_id, streamer);
 
         loop {
             match self.live_monitor(long_room_id).await {

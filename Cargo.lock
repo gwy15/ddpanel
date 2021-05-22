@@ -57,9 +57,9 @@ checksum = "904dfeac50f3cdaba28fc6f57fdcddb75f49ed61346676a78c4ffe55877802fd"
 
 [[package]]
 name = "biliapi"
-version = "0.1.6"
+version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "251d66a6b16686a4631bf3112025573132990c6e2c06d6ea0a0b8f2edc424183"
+checksum = "52c448f1b268cd9c9bc715943a6843df7a6a63c7c0fbdfd75a14e283d920eb69"
 dependencies = [
  "async-tungstenite",
  "byteorder",
@@ -162,8 +162,10 @@ dependencies = [
  "dotenv",
  "futures",
  "influxdb-client",
+ "lazy_static",
  "log",
  "log4rs",
+ "parking_lot",
  "reqwest",
  "serde",
  "serde_json",
