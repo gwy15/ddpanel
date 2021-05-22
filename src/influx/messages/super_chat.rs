@@ -18,6 +18,7 @@ impl super::ToPoint for SuperChat {
     fn into_basic_point(self) -> Point {
         Point::new("live-gift")
             .tag("type", "superchat")
+            .tag("sender", self.sender_id as i64)
             .field("price", self.price())
     }
 }

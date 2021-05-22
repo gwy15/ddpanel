@@ -31,6 +31,7 @@ impl super::ToPoint for SendGift {
             Point::new("live-gift")
                 .tag("type", "gift")
                 .tag("gift_name", self.gift_name.as_str())
+                .tag("sender", self.sender_id as i64)
                 .field("num", self.num as i64)
                 .field("price", self.price())
         } else {
