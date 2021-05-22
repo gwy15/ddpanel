@@ -9,17 +9,24 @@ pub struct RoomInfo {
     pub streamer: String,
 }
 impl RoomInfo {
-    pub fn from_cache(id: u64) -> Self {
-        let streamer = crate::manager::ROOM_ID_TO_STREAMER
+    #[inline(always)]
+    pub fn from_cache_opt(id: u64) -> Option<Self> {
+        crate::manager::ROOM_ID_TO_STREAMER
             .read()
             .get(&id)
             .cloned()
-            .unwrap_or_else(|| {
-                warn!("room {} streamer name not found!", id);
-                id.to_string()
-            });
-        let room_info = RoomInfo { id, streamer };
-        room_info
+            .map(|streamer| RoomInfo { id, streamer })
+    }
+
+    #[inline(always)]
+    pub fn from_cache(id: u64) -> Self {
+        Self::from_cache_opt(id).unwrap_or_else(|| {
+            warn!("room {} streamer name not found!", id);
+            Self {
+                id,
+                streamer: id.to_string(),
+            }
+        })
     }
     pub fn write_cache(id: u64, streamer: String) {
         crate::manager::ROOM_ID_TO_STREAMER

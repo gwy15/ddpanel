@@ -1,5 +1,5 @@
 [package]
-name = "ddpanel"
+name = "ddpanel-recorder"
 version = "0.1.0"
 authors = ["gwy15 <gwy15thu@gmail.com>"]
 edition = "2018"
@@ -21,6 +21,8 @@ futures = "0.3.15"
 reqwest = { version = "0.11.3", default-features = false, features = ["rustls-tls"] }
 influxdb-client = { version = "*", git = "https://github.com/gwy15/influxdb-client-rs.git", branch = "misc" }
 dotenv = "0.15.0"
+
+clap = "3.0.0-beta.2"
 
 # for room info
 lazy_static = "1.4.0"

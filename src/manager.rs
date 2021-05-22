@@ -12,6 +12,7 @@ use crate::{
     file_appender::FileAppender,
     influx::InfluxAppender,
     monitor::Monitor,
+    replayer::FileReplayer,
     task_factory::{TaskFactory, TaskSet},
 };
 
@@ -62,6 +63,25 @@ impl Manager {
         self
     }
 
+    pub fn no_appender(self) -> Self {
+        let receiver = self.packet_channel.subscribe();
+        tokio::spawn(async move {
+            let mut receiver = receiver;
+            loop {
+                match receiver.recv().await {
+                    Ok(packet) => {
+                        // tokio::time::sleep(std::time::Duration::from_micros(1)).await;
+                        std::mem::drop(packet)
+                    }
+                    Err(e) => {
+                        error!("no-op receiver recv error: {:?}", e);
+                    }
+                }
+            }
+        });
+        self
+    }
+
     /// run with task factory
     pub async fn start(mut self, task_file: PathBuf) -> Result<()> {
         let http_client = biliapi::connection::new_client()?;
@@ -94,6 +114,17 @@ impl Manager {
                 self.packet_producers.insert(new_id, terminate_sender);
             }
         }
+        Ok(())
+    }
+
+    pub async fn replay(self, replay_file: PathBuf) -> Result<()> {
+        let http_client = biliapi::connection::new_client()?;
+
+        let replayer =
+            FileReplayer::new(replay_file, self.packet_channel.clone(), http_client).await?;
+
+        replayer.start().await?;
+
         Ok(())
     }
 }
