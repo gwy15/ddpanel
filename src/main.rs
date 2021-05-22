@@ -28,7 +28,7 @@ async fn main() -> Result<()> {
         .influx_appender(influx_client)
         .file_appender("recorded.json".into())
         .await?
-        .start("rooms".into())
+        .start("rooms.json".into())
         .await?;
     Ok(())
 }

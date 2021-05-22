@@ -67,6 +67,7 @@ impl InfluxAppender {
             "SUPER_CHAT_MESSAGE" | "SUPER_CHAT_MESSAGE_JPN" => {
                 let sc: SuperChat =
                     serde_json::from_value(msg.data).context("convert msg to super chat failed")?;
+                info!("sc: {:?}", sc);
                 sc.into_point(room_id, t)
             }
             "SEND_GIFT" => {
@@ -94,7 +95,9 @@ impl InfluxAppender {
     }
 
     async fn on_popularity(&self, popularity: i64, room_id: u64, t: DateTime<Local>) -> Result<()> {
-        let point = Popularity::new(popularity).into_point(room_id, t);
+        let p = Popularity::new(popularity);
+        info!("room popularity: {:?}", p);
+        let point = p.into_point(room_id, t);
         self.client
             .insert_points(&[point], TimestampOptions::FromPoint)
             .await?;
