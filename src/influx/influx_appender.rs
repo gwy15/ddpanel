@@ -89,6 +89,10 @@ impl InfluxAppender {
             "SEND_GIFT" => {
                 let gift: SendGift =
                     serde_json::from_value(msg.data).context("convert msg to send gift failed")?;
+                // 不统计免费礼物
+                if gift.is_free() {
+                    return Ok(());
+                }
                 info!("gift: {:?}", gift);
                 gift.into_point(room_info, t)
             }

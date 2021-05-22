@@ -24,10 +24,13 @@ impl SendGift {
             0f64
         }
     }
+    pub fn is_free(&self) -> bool {
+        self.coin_type == "silver"
+    }
 }
 impl super::ToPoint for SendGift {
     fn into_basic_point(self) -> Point {
-        if self.coin_type == "gold" {
+        if !self.is_free() {
             Point::new("live-gift")
                 .tag("type", "gift")
                 .tag("gift_name", self.gift_name.as_str())
