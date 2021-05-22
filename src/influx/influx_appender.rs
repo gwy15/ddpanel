@@ -2,7 +2,10 @@ use anyhow::{Context, Result};
 use biliapi::ws_protocol::{KnownOperation, Operation, Packet};
 use chrono::{DateTime, Local};
 use influxdb_client::{Client as InfluxClient, Point, TimestampOptions};
-use tokio::sync::{broadcast, oneshot};
+use tokio::sync::{
+    broadcast::{self, error::RecvError},
+    oneshot,
+};
 
 use super::{messages::*, RoomInfo};
 
@@ -45,6 +48,7 @@ impl InfluxAppender {
     }
 
     async fn start_writer(&mut self) -> Result<()> {
+        // https://play.rust-lang.org/?version=stable&mode=debug&edition=2018&gist=6ba08f53a430171c7791ac5d0dd15a84
         loop {
             let recv = self.packets_receiver.recv().await;
             match recv {
@@ -54,10 +58,12 @@ impl InfluxAppender {
                         warn!("Failed to process packet: {:?}", e);
                     }
                 },
-                Err(e) => {
-                    error!("recv error: {:?}", e);
-                    return Err(e.into());
+                Err(RecvError::Lagged(cnt)) => {
+                    error!("Influxdb write too slow and lagged {} packets!", cnt);
+                    // return Err(e.into());
+                    continue;
                 }
+                Err(RecvError::Closed) => return Err(RecvError::Closed.into()),
             }
         }
     }
@@ -93,10 +99,12 @@ impl InfluxAppender {
         t: DateTime<Local>,
     ) -> Result<()> {
         let point = match msg.cmd.as_str() {
-            "SUPER_CHAT_MESSAGE" | "SUPER_CHAT_MESSAGE_JPN" => {
+            "SUPER_CHAT_MESSAGE" 
+            // | "SUPER_CHAT_MESSAGE_JPN" 日语翻译的会推送两遍导致重复计费
+            => {
                 let sc: SuperChat =
                     serde_json::from_value(msg.data).context("convert msg to super chat failed")?;
-                info!("sc: {:?}", sc);
+                info!("SC: {} @ {}", sc, room_info.streamer);
                 sc.into_point(room_info, t)
             }
             "SEND_GIFT" => {
@@ -106,13 +114,13 @@ impl InfluxAppender {
                 if gift.is_free() {
                     return Ok(());
                 }
-                info!("gift: {:?}", gift);
+                info!("礼物: {} @ {}", gift, room_info.streamer);
                 gift.into_point(room_info, t)
             }
             "USER_TOAST_MSG" => {
                 let guard: UserToastMsg = serde_json::from_value(msg.data)
                     .context("convert msg to UserToastMsg failed.")?;
-                info!("guard buy: {:?}", guard);
+                info!("舰长: {} @ {}", guard, room_info.streamer);
                 guard.into_point(room_info, t)
             }
             "DANMU_MSG" => {

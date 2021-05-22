@@ -43,7 +43,7 @@ impl Manager {
     }
 
     /// add file appender (consumer)
-    pub async fn file_appender(mut self, path: PathBuf) -> Result<Self> {
+    pub async fn file_appender(mut self, path: String) -> Result<Self> {
         let receiver = self.packet_channel.subscribe();
         let appender = FileAppender::new(path, receiver).await?;
 
@@ -127,14 +127,14 @@ impl Manager {
         Ok(())
     }
 
-    pub async fn replay(mut self, replay_file: PathBuf, replay_delay_us: u32) -> Result<()> {
+    pub async fn replay(mut self, replay_file: PathBuf, replay_delay_ms: u32) -> Result<()> {
         let http_client = biliapi::connection::new_client()?;
 
         let replayer = FileReplayer::new(
             replay_file,
             self.packet_channel.clone(),
             http_client,
-            replay_delay_us,
+            replay_delay_ms,
         )
         .await?;
 

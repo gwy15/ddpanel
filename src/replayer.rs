@@ -20,7 +20,7 @@ impl FileReplayer {
         path: PathBuf,
         broadcaster: broadcast::Sender<Packet>,
         http_client: HttpClient,
-        replay_delay_us: u32,
+        replay_delay_ms: u32,
     ) -> Result<Self> {
         let f = File::open(&path).await?;
         let reader = BufReader::new(f);
@@ -28,7 +28,7 @@ impl FileReplayer {
             reader,
             broadcaster,
             http_client,
-            replay_delay: Duration::from_micros(replay_delay_us as u64),
+            replay_delay: Duration::from_millis(replay_delay_ms as u64),
         })
     }
 

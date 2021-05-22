@@ -19,8 +19,8 @@ use manager::Manager;
 
 #[derive(Debug, clap::Clap)]
 struct Opts {
-    #[clap(long = "record-output", short = 'o', default_value = "recorded.json")]
-    record_file: PathBuf,
+    #[clap(long = "record-output", short = 'o', default_value = "recorded-%.json")]
+    record_file: String,
 
     #[clap(
         long = "no-file",
@@ -35,12 +35,12 @@ struct Opts {
     replay: Option<PathBuf>,
 
     #[clap(
-        long = "replay-delay-us",
+        long = "replay-delay",
         short = 's',
-        default_value = "0",
+        default_value = "100",
         about = "Replay the file with a slight delay every 1000 packets."
     )]
-    replay_delay_us: u32,
+    replay_delay_ms: u32,
 
     #[clap(
         long = "watch",
@@ -89,7 +89,7 @@ async fn main() -> Result<()> {
 
     if let Some(replay) = opts.replay {
         // always disable file output
-        manager.replay(replay, opts.replay_delay_us).await?;
+        manager.replay(replay, opts.replay_delay_ms).await?;
     } else {
         // start record
         manager.start(opts.watch).await?;

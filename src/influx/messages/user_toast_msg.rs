@@ -1,4 +1,5 @@
 use influxdb_client::Point;
+use std::fmt::{self, Display, Formatter};
 
 #[derive(Debug, Deserialize)]
 pub struct UserToastMsg {
@@ -15,6 +16,16 @@ pub struct UserToastMsg {
 impl UserToastMsg {
     pub fn price(&self) -> f64 {
         (self.price_milli * self.num) as f64 * 0.001
+    }
+}
+impl Display for UserToastMsg {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_fmt(format_args!(
+            "UserToastMsg {{ {} * {} = ￥{} }}",
+            self.gift_name,
+            self.num,
+            self.price()
+        ))
     }
 }
 impl super::ToPoint for UserToastMsg {

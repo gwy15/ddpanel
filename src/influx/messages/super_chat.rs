@@ -1,4 +1,5 @@
 use influxdb_client::Point;
+use std::fmt::{self, Display, Formatter};
 
 // super chat
 #[derive(Debug, Deserialize)]
@@ -12,6 +13,11 @@ pub struct SuperChat {
 impl SuperChat {
     pub fn price(&self) -> f64 {
         self.price as f64
+    }
+}
+impl Display for SuperChat {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_fmt(format_args!("SuperChat {{ ￥{} }}", self.price))
     }
 }
 impl super::ToPoint for SuperChat {

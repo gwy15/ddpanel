@@ -1,3 +1,5 @@
+use std::fmt::{self, Display, Formatter};
+
 use influxdb_client::Point;
 
 #[derive(Debug, Deserialize)]
@@ -26,6 +28,20 @@ impl SendGift {
     }
     pub fn is_free(&self) -> bool {
         self.coin_type == "silver"
+    }
+}
+impl Display for SendGift {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        if self.coin_type == "gold" {
+            f.write_fmt(format_args!(
+                "Gift {{ {} * {} = ￥{}}}",
+                self.gift_name,
+                self.num,
+                self.price()
+            ))
+        } else {
+            f.write_fmt(format_args!("Gift {{ {} * {} }}", self.gift_name, self.num))
+        }
     }
 }
 impl super::ToPoint for SendGift {
