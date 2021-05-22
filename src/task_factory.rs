@@ -1,8 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    path::PathBuf,
-    time::Duration,
-};
+use std::{collections::HashSet, path::PathBuf, time::Duration};
 
 use anyhow::Result;
 use tokio::sync::mpsc;
@@ -56,14 +52,24 @@ impl TaskFactory {
     }
 
     async fn load(&self) -> Result<TaskSet> {
+        let mut tasks = TaskSet::default();
         let content = tokio::fs::read_to_string(&self.task_file).await?;
-
-        let rooms: HashMap<String, u64> = serde_json::from_str(&content)?;
-
-        Ok(rooms
-            .into_iter()
-            .filter(|(k, _v)| !k.starts_with('#'))
-            .map(|(_k, v)| v)
-            .collect())
+        for line in content.lines() {
+            if line.trim().is_empty() {
+                continue;
+            }
+            if line.starts_with('#') || line.starts_with("//") {
+                continue;
+            }
+            match line.parse::<u64>() {
+                Ok(id) => {
+                    tasks.insert(id);
+                }
+                Err(e) => {
+                    warn!("Failed to parse task file: {:?}", e);
+                }
+            }
+        }
+        Ok(tasks)
     }
 }

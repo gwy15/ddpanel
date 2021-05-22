@@ -1,7 +1,7 @@
 use anyhow::Result;
 use biliapi::ws_protocol::Packet;
 use reqwest::Client as HttpClient;
-use std::path::PathBuf;
+use std::{path::PathBuf, time::Duration};
 use tokio::{
     fs::File,
     io::{AsyncBufReadExt, BufReader},
@@ -12,6 +12,7 @@ pub struct FileReplayer {
     reader: BufReader<File>,
     broadcaster: broadcast::Sender<Packet>,
     http_client: HttpClient,
+    replay_delay: Duration,
 }
 
 impl FileReplayer {
@@ -19,6 +20,7 @@ impl FileReplayer {
         path: PathBuf,
         broadcaster: broadcast::Sender<Packet>,
         http_client: HttpClient,
+        replay_delay_us: u32,
     ) -> Result<Self> {
         let f = File::open(&path).await?;
         let reader = BufReader::new(f);
@@ -26,6 +28,7 @@ impl FileReplayer {
             reader,
             broadcaster,
             http_client,
+            replay_delay: Duration::from_micros(replay_delay_us as u64),
         })
     }
 
@@ -45,12 +48,15 @@ impl FileReplayer {
                 RoomInfo::write_cache(packet.room_id, info.anchor_info.base.uname);
             }
 
-            self.broadcaster.send(packet)?;
-
             cnt += 1;
             if cnt % 1_000 == 0 {
-                info!("{} packets replayed.", cnt);
+                info!("{} packets replayed, t = {}", cnt, packet.time);
+                if self.replay_delay.as_micros() > 0 {
+                    tokio::time::sleep(self.replay_delay).await;
+                }
             }
+
+            self.broadcaster.send(packet)?;
         }
         Ok(())
     }

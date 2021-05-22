@@ -8,6 +8,8 @@ use super::{messages::*, RoomInfo};
 
 pub struct InfluxAppender {
     insert_count: u64,
+    buffer: Vec<Point>,
+    buffer_size: usize,
     client: InfluxClient,
     packets_receiver: broadcast::Receiver<Packet>,
 }
@@ -17,17 +19,26 @@ impl InfluxAppender {
         Self {
             insert_count: 0,
             client,
+            buffer: vec![],
+            buffer_size: 0,
             packets_receiver,
         }
+    }
+
+    pub fn buffer(mut self, buffer_size: usize) -> Self {
+        self.buffer_size = buffer_size;
+        self
     }
 
     pub async fn start(mut self, terminate_receiver: oneshot::Receiver<()>) -> Result<()> {
         tokio::select! {
             _ = terminate_receiver => {
                 info!("terminate.");
+                self.flush().await?;
                 Ok(())
             },
             r = self.start_writer() => {
+                self.flush().await?;
                 r
             }
         }
@@ -121,7 +132,9 @@ impl InfluxAppender {
         t: DateTime<Local>,
     ) -> Result<()> {
         let p = Popularity::new(popularity);
-        info!("room popularity: {:?}", p);
+        if p.value > 1 {
+            debug!("room popularity: {:?}", p);
+        }
         let point = p.into_point(room_info, t);
         self.insert(point).await?;
         Ok(())
@@ -129,11 +142,40 @@ impl InfluxAppender {
 
     async fn insert(&mut self, point: Point) -> Result<()> {
         self.insert_count += 1;
-        self.client
-            .insert_points(&[point], TimestampOptions::FromPoint)
-            .await?;
-        if self.insert_count % 1_000 == 0 {
+
+        if self.buffer_size == 0 {
+            self.client
+                .insert_points(&[point], TimestampOptions::FromPoint)
+                .await?;
+        } else {
+            self.buffer.push(point);
+            if self.buffer.len() == self.buffer_size {
+                self.flush().await?;
+            }
+        }
+
+        if self.insert_count % 100 == 0 {
             info!("{} points inserted to influxdb.", self.insert_count);
+        }
+        Ok(())
+    }
+
+    /// 一定会写入
+    async fn flush(&mut self) -> Result<()> {
+        use std::time::Instant;
+        if self.buffer_size > 0 {
+            let t = Instant::now();
+
+            self.client
+                .insert_points(&self.buffer, TimestampOptions::FromPoint)
+                .await?;
+            self.buffer.clear();
+
+            info!(
+                "call influx API took {} us, wrote {} packets.",
+                t.elapsed().as_micros(),
+                self.buffer_size
+            );
         }
         Ok(())
     }

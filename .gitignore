@@ -10,6 +10,6 @@ grafana
 influxdb
 
 logs
-rooms
+watch_rooms
 
 recorded*

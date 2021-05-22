@@ -33,6 +33,22 @@ struct Opts {
 
     #[clap(long = "replay", short = 'r', about = "Replay the file")]
     replay: Option<PathBuf>,
+
+    #[clap(
+        long = "replay-delay-us",
+        short = 's',
+        default_value = "0",
+        about = "Replay the file with a slight delay every 1000 packets."
+    )]
+    replay_delay_us: u32,
+
+    #[clap(
+        long = "watch",
+        short = 'w',
+        default_value = "watch_rooms",
+        about = "The room file to watch"
+    )]
+    watch: PathBuf,
 }
 
 impl Opts {
@@ -60,7 +76,8 @@ async fn main() -> Result<()> {
     }
 
     if !opts.no_influx {
-        manager = manager.influx_appender(opts.influx_client()?)
+        let buffer_size = if opts.replay.is_some() { 64 } else { 0 };
+        manager = manager.influx_appender(opts.influx_client()?, buffer_size);
     }
     if !opts.no_file {
         manager = manager.file_appender(opts.record_file).await?;
@@ -72,10 +89,10 @@ async fn main() -> Result<()> {
 
     if let Some(replay) = opts.replay {
         // always disable file output
-        manager.replay(replay).await?;
+        manager.replay(replay, opts.replay_delay_us).await?;
     } else {
         // start record
-        manager.start("rooms.json".into()).await?;
+        manager.start(opts.watch).await?;
     }
 
     Ok(())

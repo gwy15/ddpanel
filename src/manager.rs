@@ -26,7 +26,8 @@ pub struct Manager {
 
     packet_producers: HashMap<u64, oneshot::Sender<()>>,
 
-    packet_subscribers: Vec<oneshot::Sender<()>>,
+    subscriber_terminate_senders: Vec<oneshot::Sender<()>>,
+    subscriber_handlers: Vec<tokio::task::JoinHandle<Result<()>>>,
 }
 
 impl Manager {
@@ -36,7 +37,8 @@ impl Manager {
         Self {
             packet_channel: packet_sender,
             packet_producers: HashMap::new(),
-            packet_subscribers: vec![],
+            subscriber_terminate_senders: vec![],
+            subscriber_handlers: vec![],
         }
     }
 
@@ -46,26 +48,33 @@ impl Manager {
         let appender = FileAppender::new(path, receiver).await?;
 
         let (terminate_tx, terminate_rx) = oneshot::channel();
-        self.packet_subscribers.push(terminate_tx);
-        tokio::spawn(appender.start(terminate_rx));
+        self.subscriber_terminate_senders.push(terminate_tx);
+
+        let handler = tokio::spawn(appender.start(terminate_rx));
+        self.subscriber_handlers.push(handler);
 
         Ok(self)
     }
 
-    pub fn influx_appender(mut self, influx_client: InfluxClient) -> Self {
+    pub fn influx_appender(mut self, influx_client: InfluxClient, buffer_size: usize) -> Self {
         let receiver = self.packet_channel.subscribe();
-        let appender = InfluxAppender::new(influx_client, receiver);
+        let mut appender = InfluxAppender::new(influx_client, receiver);
+        if buffer_size > 0 {
+            appender = appender.buffer(buffer_size);
+        }
 
         let (terminate_tx, terminate_rx) = oneshot::channel();
-        self.packet_subscribers.push(terminate_tx);
-        tokio::spawn(appender.start(terminate_rx));
+        self.subscriber_terminate_senders.push(terminate_tx);
+
+        let handler = tokio::spawn(appender.start(terminate_rx));
+        self.subscriber_handlers.push(handler);
 
         self
     }
 
-    pub fn no_appender(self) -> Self {
+    pub fn no_appender(mut self) -> Self {
         let receiver = self.packet_channel.subscribe();
-        tokio::spawn(async move {
+        let handler = tokio::spawn(async move {
             let mut receiver = receiver;
             loop {
                 match receiver.recv().await {
@@ -79,10 +88,11 @@ impl Manager {
                 }
             }
         });
+        self.subscriber_handlers.push(handler);
         self
     }
 
-    /// run with task factory
+    /// run with task factory, never end
     pub async fn start(mut self, task_file: PathBuf) -> Result<()> {
         let http_client = biliapi::connection::new_client()?;
 
@@ -117,23 +127,44 @@ impl Manager {
         Ok(())
     }
 
-    pub async fn replay(self, replay_file: PathBuf) -> Result<()> {
+    pub async fn replay(mut self, replay_file: PathBuf, replay_delay_us: u32) -> Result<()> {
         let http_client = biliapi::connection::new_client()?;
 
-        let replayer =
-            FileReplayer::new(replay_file, self.packet_channel.clone(), http_client).await?;
+        let replayer = FileReplayer::new(
+            replay_file,
+            self.packet_channel.clone(),
+            http_client,
+            replay_delay_us,
+        )
+        .await?;
 
         replayer.start().await?;
+
+        info!("replay finished, waiting for all handlers to finish.");
+        // drop the packet sender so that all receivers can stop
+        std::mem::drop(self.packet_channel);
+
+        // wait for all processors to finish
+        for h in std::mem::take(&mut self.subscriber_handlers) {
+            match h.await {
+                Ok(r) => {
+                    info!("subscribers: {:?}", r);
+                }
+                Err(e) => {
+                    error!("failed to join handler: {:?}", e);
+                }
+            }
+        }
 
         Ok(())
     }
 }
 
-impl Drop for Manager {
-    fn drop(&mut self) {
-        let packet_subscribers = std::mem::take(&mut self.packet_subscribers);
-        packet_subscribers.into_iter().for_each(|tx| {
-            tx.send(()).ok();
-        });
-    }
-}
+// impl Drop for Manager {
+//     fn drop(&mut self) {
+//         let packet_subscribers = std::mem::take(&mut self.subscriber_terminate_senders);
+//         packet_subscribers.into_iter().for_each(|tx| {
+//             tx.send(()).ok();
+//         });
+//     }
+// }
