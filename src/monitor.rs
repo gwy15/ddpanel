@@ -41,7 +41,7 @@ impl Monitor {
     }
 
     async fn start_live_monitor_with_retry(&mut self) -> Result<()> {
-        info!("run_with_retry: room_id = {}", self.room_id);
+        debug!("run_with_retry: room_id = {}", self.room_id);
         let room_info =
             biliapi::requests::InfoByRoom::request(&self.http_client, self.room_id).await?;
         let long_room_id = room_info.room_info.room_id;
@@ -49,10 +49,10 @@ impl Monitor {
 
         let mut last_time = Instant::now();
         let mut err_counter = 0;
-        RoomInfo::write_cache(long_room_id, streamer);
+        RoomInfo::write_cache(long_room_id, streamer.clone());
 
         loop {
-            match self.live_monitor(long_room_id).await {
+            match self.live_monitor(long_room_id, &streamer).await {
                 Ok(_) => unreachable!(),
                 Err(e) => {
                     warn!("发生错误：{:?}", e);
@@ -76,7 +76,7 @@ impl Monitor {
         }
     }
 
-    async fn live_monitor(&mut self, long_room_id: u64) -> Result<()> {
+    async fn live_monitor(&mut self, long_room_id: u64, streamer: &str) -> Result<()> {
         // 拿到弹幕数据
         let danmu_info =
             biliapi::requests::DanmuInfo::request(&self.http_client, long_room_id).await?;
@@ -85,7 +85,7 @@ impl Monitor {
 
         let mut connection =
             biliapi::connection::LiveConnection::new(&url, long_room_id, danmu_info.token).await?;
-        info!("room {} connected.", long_room_id);
+        info!("room {} ({}) connected.", long_room_id, streamer);
         while let Some(packet) = connection.next().await {
             match packet {
                 Ok(packet) => {
