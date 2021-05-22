@@ -14,6 +14,7 @@ use tokio::{
 const MAX_FLUSH: Duration = Duration::from_secs(2);
 
 pub struct FileAppender {
+    count: u64,
     file: BufWriter<File>,
     receiver: broadcast::Receiver<Packet>,
 }
@@ -27,7 +28,11 @@ impl FileAppender {
             .open(&path)
             .await?;
         let file = BufWriter::new(file);
-        Ok(Self { file, receiver })
+        Ok(Self {
+            count: 0,
+            file,
+            receiver,
+        })
     }
 
     pub async fn start(mut self, terminate_receiver: oneshot::Receiver<()>) -> Result<()> {
@@ -67,10 +72,16 @@ impl FileAppender {
     }
 
     async fn write_packet(&mut self, packet: Packet) -> Result<()> {
+        self.count += 1;
         self.file
             .write_all(serde_json::to_string(&packet)?.as_bytes())
             .await?;
         self.file.write_all("\n".as_bytes()).await?;
+
+        if self.count % 10_000 == 0 {
+            info!("file recorded {} packets.", self.count);
+        }
+
         Ok(())
     }
 }
