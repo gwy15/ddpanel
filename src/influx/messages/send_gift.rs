@@ -13,7 +13,7 @@ pub struct SendGift {
     #[serde(rename = "num")]
     num: u32,
 
-    #[serde(rename = "uid")]
+    #[serde(rename = "uid", deserialize_with = "super::u64_from_value")]
     sender_id: u64,
 }
 impl SendGift {

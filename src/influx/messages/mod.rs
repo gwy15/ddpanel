@@ -20,6 +20,30 @@ pub trait ToPoint: Sized {
     }
 }
 
+pub fn u64_from_value<'de, D>(deserializer: D) -> Result<u64, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::{Deserialize, Error, Unexpected};
+
+    let v = Value::deserialize(deserializer)?;
+    match v {
+        Value::Null => {
+            unimplemented!()
+        }
+        Value::Bool(b) => Err(Error::invalid_type(Unexpected::Bool(b), &"u64")),
+        Value::Number(n) => match n.as_i64() {
+            Some(n) => Ok(n as u64),
+            None => Err(Error::custom(format!("Cannot parse number {} as u64", n))),
+        },
+        Value::String(s) => s
+            .parse()
+            .map_err(|e| Error::custom(format!("Failed to parse string {:?} as u64: {}", s, e))),
+        Value::Array(_arr) => Err(Error::invalid_type(Unexpected::Seq, &"u64")),
+        Value::Object(_obj) => Err(Error::invalid_type(Unexpected::Map, &"u64")),
+    }
+}
+
 mod popularity;
 mod send_gift;
 mod super_chat;

@@ -32,6 +32,7 @@ impl Monitor {
                 Ok(())
             }
             ret = self.start_live_monitor_with_retry() => {
+                error!("start_live_monitor_with_retry returned: {:?}", ret);
                 ret
             }
         }
@@ -84,6 +85,7 @@ impl Monitor {
         while let Some(packet) = connection.next().await {
             match packet {
                 Ok(packet) => {
+                    debug!("received packet: {}", packet.operation);
                     self.broadcaster
                         .send(packet)
                         .map_err(|_| anyhow!("Cannot send packet!"))?;

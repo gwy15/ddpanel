@@ -6,7 +6,7 @@ pub struct SuperChat {
     // rmb
     price: u32,
     //
-    #[serde(rename = "uid")]
+    #[serde(rename = "uid", deserialize_with = "super::u64_from_value")]
     sender_id: u64,
 }
 impl SuperChat {

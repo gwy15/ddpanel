@@ -2,7 +2,6 @@
 appenders:
   console_appender:
     kind: console
-    # i.e. formatter
     encoder:
       kind: pattern
       pattern: "{date(%H:%M:%S%.3f)} [{highlight({level:5})}] (({target:15}:{line})) - {message}{n}"
@@ -32,7 +31,19 @@ root:
 
 loggers:
   hyper:
-    level: warn
+    level: info
+    appenders:
+      - file_appender
+      - console_appender
+    additive: false
+  rustls:
+    level: info
+    appenders:
+      - file_appender
+      - console_appender
+    additive: false
+  reqwest:
+    level: info
     appenders:
       - file_appender
       - console_appender

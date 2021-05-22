@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::Result;
 use biliapi::ws_protocol::Packet;
 use std::{
     path::PathBuf,
@@ -48,15 +48,22 @@ impl FileAppender {
         let mut items: u64 = 0;
         let mut last_flush = Instant::now();
 
-        while let Ok(packet) = self.receiver.recv().await {
-            self.write_packet(packet).await?;
-            items += 1;
-            if items % 1_000 == 0 || Instant::now().duration_since(last_flush) > MAX_FLUSH {
-                self.file.flush().await?;
-                last_flush = Instant::now();
+        loop {
+            match self.receiver.recv().await {
+                Ok(packet) => {
+                    self.write_packet(packet).await?;
+                    items += 1;
+                    if items % 1_000 == 0 || Instant::now().duration_since(last_flush) > MAX_FLUSH {
+                        self.file.flush().await?;
+                        last_flush = Instant::now();
+                    }
+                }
+                Err(e) => {
+                    error!("file appender recv error: {:?}", e);
+                    return Err(e.into());
+                }
             }
         }
-        bail!("File writer exited unexpectedly.")
     }
 
     async fn write_packet(&mut self, packet: Packet) -> Result<()> {
