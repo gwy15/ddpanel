@@ -1,12 +1,13 @@
 use anyhow::{Context, Result};
 use biliapi::ws_protocol::{KnownOperation, Operation, Packet};
 use chrono::{DateTime, Local};
-use influxdb_client::{Client as InfluxClient, TimestampOptions};
+use influxdb_client::{Client as InfluxClient, Point, TimestampOptions};
 use tokio::sync::{broadcast, oneshot};
 
 use super::{messages::*, RoomInfo};
 
 pub struct InfluxAppender {
+    insert_count: u64,
     client: InfluxClient,
     packets_receiver: broadcast::Receiver<Packet>,
 }
@@ -14,6 +15,7 @@ pub struct InfluxAppender {
 impl InfluxAppender {
     pub fn new(client: InfluxClient, packets_receiver: broadcast::Receiver<Packet>) -> Self {
         Self {
+            insert_count: 0,
             client,
             packets_receiver,
         }
@@ -74,7 +76,7 @@ impl InfluxAppender {
     }
 
     async fn on_send_msg_reply(
-        &self,
+        &mut self,
         msg: SendMsgReply,
         room_info: &RoomInfo,
         t: DateTime<Local>,
@@ -108,14 +110,12 @@ impl InfluxAppender {
             }
             _ => return Ok(()),
         };
-        self.client
-            .insert_points(&[point], TimestampOptions::FromPoint)
-            .await?;
+        self.insert(point).await?;
         Ok(())
     }
 
     async fn on_popularity(
-        &self,
+        &mut self,
         popularity: i64,
         room_info: &RoomInfo,
         t: DateTime<Local>,
@@ -123,9 +123,18 @@ impl InfluxAppender {
         let p = Popularity::new(popularity);
         info!("room popularity: {:?}", p);
         let point = p.into_point(room_info, t);
+        self.insert(point).await?;
+        Ok(())
+    }
+
+    async fn insert(&mut self, point: Point) -> Result<()> {
+        self.insert_count += 1;
         self.client
             .insert_points(&[point], TimestampOptions::FromPoint)
             .await?;
+        if self.insert_count % 1_000 == 0 {
+            info!("{} points inserted to influxdb.", self.insert_count);
+        }
         Ok(())
     }
 }
