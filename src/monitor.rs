@@ -30,7 +30,7 @@ impl Monitor {
     pub async fn start(mut self, terminate_receiver: oneshot::Receiver<()>) -> Result<()> {
         tokio::select! {
             _ = terminate_receiver => {
-                info!("Room monitor {} received stop signal. Stopping.", self.room_id);
+                debug!("Room monitor {} received stop signal. Stopping.", self.room_id);
                 Ok(())
             }
             ret = self.start_live_monitor_with_retry() => {

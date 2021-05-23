@@ -22,11 +22,13 @@ lazy_static::lazy_static! {
 }
 
 pub struct Manager {
+    /// 主通信渠道
     packet_channel: broadcast::Sender<Packet>,
-
-    packet_producers: HashMap<u64, oneshot::Sender<()>>,
-
+    /// 接收到结束信号的时候，会向各个 monitor 发送结束信号
+    monitor_terminate_senders: HashMap<u64, oneshot::Sender<()>>,
+    /// 实际上没用到
     subscriber_terminate_senders: Vec<oneshot::Sender<()>>,
+    /// 等待各个 subscriber 结束的 handler
     subscriber_handlers: Vec<tokio::task::JoinHandle<Result<()>>>,
 }
 
@@ -36,7 +38,7 @@ impl Manager {
 
         Self {
             packet_channel: packet_sender,
-            packet_producers: HashMap::new(),
+            monitor_terminate_senders: HashMap::new(),
             subscriber_terminate_senders: vec![],
             subscriber_handlers: vec![],
         }
@@ -98,37 +100,52 @@ impl Manager {
         let http_client = biliapi::connection::new_client()?;
 
         let mut task_receiver = TaskFactory::start(task_file);
-        while let Some(tasks) = task_receiver.recv().await {
-            // check for tasks
-            let cur_tasks: TaskSet = self.packet_producers.keys().cloned().collect();
-            // terminate old tasks
-            let stop_tasks = cur_tasks.difference(&tasks);
-            for stop_id in stop_tasks {
-                info!("Stopping monitor room {}", stop_id);
-                // safety: stop_id 一定在 cur_tasks 中
-                let sender = self.packet_producers.remove(stop_id).unwrap();
-                if sender.send(()).is_err() {
-                    bail!(
-                        "Send terminate to id {} but the monitor is already dead.",
-                        stop_id
-                    );
-                };
-            }
-            // start new tasks
-            let new_tasks = tasks.difference(&cur_tasks);
-            for &new_id in new_tasks {
-                info!("start new monitor room: {}", new_id);
-                let (terminate_sender, terminate_receiver) = oneshot::channel();
-                let monitor =
-                    Monitor::new(new_id, self.packet_channel.clone(), http_client.clone());
-                tokio::spawn(monitor.start(terminate_receiver));
-                self.packet_producers.insert(new_id, terminate_sender);
+        // 一直等到 task_receiver 结束
+        loop {
+            let recv = task_receiver.recv().await;
+            match recv {
+                Some(tasks) => {
+                    // check for tasks
+                    let cur_tasks: TaskSet =
+                        self.monitor_terminate_senders.keys().cloned().collect();
+                    // terminate old tasks
+                    let stop_tasks = cur_tasks.difference(&tasks);
+                    for stop_id in stop_tasks {
+                        info!("Stopping monitor room {}", stop_id);
+                        // safety: stop_id 一定在 cur_tasks 中
+                        let sender = self.monitor_terminate_senders.remove(stop_id).unwrap();
+                        if sender.send(()).is_err() {
+                            bail!(
+                                "Send terminate to id {} but the monitor is already dead.",
+                                stop_id
+                            );
+                        };
+                    }
+                    // start new tasks
+                    let new_tasks = tasks.difference(&cur_tasks);
+                    for &new_id in new_tasks {
+                        info!("start new monitor room: {}", new_id);
+                        let (terminate_sender, terminate_receiver) = oneshot::channel();
+                        let monitor =
+                            Monitor::new(new_id, self.packet_channel.clone(), http_client.clone());
+                        tokio::spawn(monitor.start(terminate_receiver));
+                        self.monitor_terminate_senders
+                            .insert(new_id, terminate_sender);
+                    }
+                }
+                None => {
+                    debug!("manger noticed that task factory has stopped.");
+                    break;
+                }
             }
         }
+
+        self.finish().await?;
+
         Ok(())
     }
 
-    pub async fn replay(mut self, replay_file: String, replay_delay_ms: u32) -> Result<()> {
+    pub async fn replay(self, replay_file: String, replay_delay_ms: u32) -> Result<()> {
         let http_client = biliapi::connection::new_client()?;
 
         let mut replayer =
@@ -138,20 +155,37 @@ impl Manager {
         std::mem::drop(replayer);
 
         info!("replay finished, waiting for all handlers to finish.");
+
+        self.finish().await?;
+        Ok(())
+    }
+
+    pub async fn finish(self) -> Result<()> {
+        for (_id, terminator) in self.monitor_terminate_senders.into_iter() {
+            if terminator.send(()).is_err() {
+                warn!("A monitor has already died.");
+            };
+        }
+
         // drop the packet sender so that all receivers can stop
         std::mem::drop(self.packet_channel);
 
-        // wait for all processors to finish
-        for h in std::mem::take(&mut self.subscriber_handlers) {
+        info!(
+            "manger waiting for all processors to finish ({} processors)",
+            self.subscriber_handlers.len()
+        );
+        for h in self.subscriber_handlers {
             match h.await {
                 Ok(r) => {
-                    info!("subscribers: {:?}", r);
+                    info!("subscriber join result: {:?}", r);
                 }
                 Err(e) => {
                     error!("failed to join handler: {:?}", e);
                 }
             }
         }
+
+        info!("manager graceful stop success.");
 
         Ok(())
     }

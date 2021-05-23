@@ -5,7 +5,10 @@ use std::time::{Duration, Instant};
 use tokio::{
     fs::{File, OpenOptions},
     io::{AsyncWriteExt, BufWriter},
-    sync::{broadcast, oneshot},
+    sync::{
+        broadcast::{self, error::RecvError},
+        oneshot,
+    },
 };
 
 /// 两秒写一次数据
@@ -39,6 +42,7 @@ impl FileAppender {
                 Ok(())
             },
             r = self.start_writer() => {
+                info!("file appender flushing.");
                 self.flush_and_swap().await?;
                 r
             }
@@ -73,9 +77,13 @@ impl FileAppender {
                         last_flush = Instant::now();
                     }
                 }
-                Err(e) => {
-                    error!("file appender recv error: {:?}", e);
-                    return Err(e.into());
+                Err(RecvError::Lagged(i)) => {
+                    error!("File appender lagged! lagged {} packets", i);
+                    continue;
+                }
+                Err(RecvError::Closed) => {
+                    info!("file appender received stop signal. stopping");
+                    return Ok(());
                 }
             }
         }

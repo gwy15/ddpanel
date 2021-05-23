@@ -25,6 +25,7 @@ impl TaskFactory {
         receiver
     }
 
+    /// 一直循环解析任务，或等到特定的信号结束
     async fn run(mut self) -> Result<()> {
         loop {
             match self.load_tasks().await {
@@ -50,7 +51,14 @@ impl TaskFactory {
                     );
                 }
             }
-            tokio::time::sleep(REFRESH_DURATION).await;
+            tokio::select! {
+                _ = tokio::signal::ctrl_c() => {
+                    std::mem::drop(self.sender);
+                    info!("ctrl+c received, stopping task_factory.");
+                    return Ok(());
+                }
+                _ = tokio::time::sleep(REFRESH_DURATION) => {}
+            }
         }
     }
 
