@@ -30,7 +30,7 @@ impl TaskFactory {
             match self.load_tasks().await {
                 Ok(tasks) => match self.last.as_ref() {
                     None => {
-                        info!("task initialized => {:?}", tasks);
+                        info!("task initialized => {} tasks = {:?}", tasks.len(), tasks);
                         self.last = Some(tasks.clone());
                         self.sender.send(tasks).await?;
                     }

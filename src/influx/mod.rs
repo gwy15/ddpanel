@@ -21,7 +21,7 @@ impl RoomInfo {
     #[inline(always)]
     pub fn from_cache(id: u64) -> Self {
         Self::from_cache_opt(id).unwrap_or_else(|| {
-            warn!("room {} streamer name not found!", id);
+            warn!("room {} streamer name not found! This is a logic flaw!", id);
             Self {
                 id,
                 streamer: id.to_string(),
@@ -32,7 +32,7 @@ impl RoomInfo {
         crate::manager::ROOM_ID_TO_STREAMER
             .write()
             .insert(id, streamer.clone());
-        info!(
+        debug!(
             "wrote streamer name = {} to cache (room = {})",
             streamer, id
         );
