@@ -261,12 +261,20 @@ impl InfluxAppender {
                 .await
             {
                 Ok(_) => {
-                    info!(
-                        "insert influx success, took {} ms, wrote {} points. (previously {} retries)",
-                        t.elapsed().as_millis(),
-                        points.len(),
-                        i
-                    );
+                    if i > 0 {
+                        info!(
+                            "insert influx success, took {} ms, wrote {} points. (previously {} retries)",
+                            t.elapsed().as_millis(),
+                            points.len(),
+                            i
+                        );
+                    } else {
+                        info!(
+                            "insert influx success, took {} ms, wrote {} points.",
+                            t.elapsed().as_millis(),
+                            points.len(),
+                        );
+                    }
                     return Ok(());
                 }
                 Err(e) => {
