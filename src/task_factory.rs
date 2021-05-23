@@ -1,6 +1,6 @@
-use std::{collections::HashSet, path::PathBuf, time::Duration};
+use std::{collections::HashSet, num::ParseIntError, path::PathBuf, time::Duration};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use tokio::sync::mpsc;
 
 const REFRESH_DURATION: Duration = Duration::from_secs(10);
@@ -27,7 +27,7 @@ impl TaskFactory {
 
     async fn run(mut self) -> Result<()> {
         loop {
-            match self.load().await {
+            match self.load_tasks().await {
                 Ok(tasks) => match self.last.as_ref() {
                     None => {
                         info!("task initialized => {:?}", tasks);
@@ -44,32 +44,102 @@ impl TaskFactory {
                     }
                 },
                 Err(e) => {
-                    warn!("task factory failed to load tasks: {:?}. Retrying...", e);
+                    warn!(
+                        "task factory failed to load tasks: {:?}. Will try again.",
+                        e
+                    );
                 }
             }
             tokio::time::sleep(REFRESH_DURATION).await;
         }
     }
 
-    async fn load(&self) -> Result<TaskSet> {
-        let mut tasks = TaskSet::default();
+    async fn load_tasks(&self) -> Result<TaskSet> {
         let content = tokio::fs::read_to_string(&self.task_file).await?;
+        Self::parse_content(&content).context("Failed to parse task file")
+    }
+
+    fn parse_content(content: &str) -> Result<TaskSet> {
+        let mut tasks = TaskSet::new();
         for line in content.lines() {
-            if line.trim().is_empty() {
+            let line = line.trim();
+            if line.is_empty() {
                 continue;
             }
             if line.starts_with('#') || line.starts_with("//") {
                 continue;
             }
-            match line.parse::<u64>() {
-                Ok(id) => {
-                    tasks.insert(id);
-                }
-                Err(e) => {
-                    warn!("Failed to parse task file: {:?}", e);
-                }
-            }
+            let line: TaskSet = line
+                .split(',')
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.parse())
+                .collect::<Result<TaskSet, ParseIntError>>()?;
+            tasks.extend(line);
         }
         Ok(tasks)
     }
+}
+
+#[test]
+fn test_parse_content() {
+    macro_rules! set {
+        ($($i:expr),*) => {{
+            let mut s = TaskSet::default();
+            $(
+                s.insert($i);
+            )*
+            s
+        }}
+    }
+    assert_eq!(
+        TaskFactory::parse_content(
+            r#"
+            # test
+            // test
+            1
+            # 
+            2
+            #
+            2
+            #
+            1
+        "#
+        )
+        .unwrap(),
+        set!(1, 2)
+    );
+
+    assert_eq!(
+        TaskFactory::parse_content(
+            r#"
+            # test
+            // test
+            1,2,3
+            # 
+            2,3,4,5
+            #
+            2, 5,       3,
+            #
+            1
+        "#
+        )
+        .unwrap(),
+        set!(1, 2, 3, 4, 5)
+    );
+
+    assert!(TaskFactory::parse_content(
+        r#"
+            # test
+            // test
+            1,2,3
+            # 
+            2,3,4,5,a
+            #
+            2, 5,       3,
+            #
+            1
+        "#
+    )
+    .is_err())
 }
