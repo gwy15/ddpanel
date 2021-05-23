@@ -83,7 +83,8 @@ impl Manager {
                         std::mem::drop(packet)
                     }
                     Err(e) => {
-                        error!("no-op receiver recv error: {:?}", e);
+                        info!("no-op receiver close: {:?}", e);
+                        return Ok(());
                     }
                 }
             }
@@ -127,18 +128,14 @@ impl Manager {
         Ok(())
     }
 
-    pub async fn replay(mut self, replay_file: PathBuf, replay_delay_ms: u32) -> Result<()> {
+    pub async fn replay(mut self, replay_file: String, replay_delay_ms: u32) -> Result<()> {
         let http_client = biliapi::connection::new_client()?;
 
-        let replayer = FileReplayer::new(
-            replay_file,
-            self.packet_channel.clone(),
-            http_client,
-            replay_delay_ms,
-        )
-        .await?;
+        let mut replayer =
+            FileReplayer::new(self.packet_channel.clone(), http_client, replay_delay_ms).await?;
 
-        replayer.start().await?;
+        replayer.replay(replay_file).await?;
+        std::mem::drop(replayer);
 
         info!("replay finished, waiting for all handlers to finish.");
         // drop the packet sender so that all receivers can stop

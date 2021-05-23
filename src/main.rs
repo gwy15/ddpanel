@@ -32,7 +32,7 @@ struct Opts {
     no_influx: bool,
 
     #[clap(long = "replay", short = 'r', about = "Replay the file")]
-    replay: Option<PathBuf>,
+    replay: Option<String>,
 
     #[clap(
         long = "replay-delay",

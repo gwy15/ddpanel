@@ -163,7 +163,7 @@ impl InfluxAppender {
         }
 
         if self.insert_count % 100 == 0 {
-            info!("{} points inserted to influxdb.", self.insert_count);
+            debug!("{} points inserted to influxdb.", self.insert_count);
         }
         Ok(())
     }
@@ -180,11 +180,20 @@ impl InfluxAppender {
             self.buffer.clear();
 
             info!(
-                "call influx API took {} us, wrote {} packets.",
+                "call influx API took {} us, wrote {} points.",
                 t.elapsed().as_micros(),
                 self.buffer_size
             );
         }
         Ok(())
+    }
+}
+
+impl Drop for InfluxAppender {
+    fn drop(&mut self) {
+        info!(
+            "influx appender wrote total of {} points.",
+            self.insert_count
+        );
     }
 }

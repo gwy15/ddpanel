@@ -1,15 +1,14 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use biliapi::ws_protocol::Packet;
 use reqwest::Client as HttpClient;
-use std::{path::PathBuf, time::Duration};
+use std::time::Duration;
 use tokio::{
     fs::File,
-    io::{AsyncBufReadExt, BufReader},
+    io::{AsyncBufRead, AsyncBufReadExt, BufReader},
     sync::broadcast,
 };
 
 pub struct FileReplayer {
-    reader: BufReader<File>,
     broadcaster: broadcast::Sender<Packet>,
     http_client: HttpClient,
     replay_delay: Duration,
@@ -17,25 +16,46 @@ pub struct FileReplayer {
 
 impl FileReplayer {
     pub async fn new(
-        path: PathBuf,
         broadcaster: broadcast::Sender<Packet>,
         http_client: HttpClient,
         replay_delay_ms: u32,
     ) -> Result<Self> {
-        let f = File::open(&path).await?;
-        let reader = BufReader::new(f);
         Ok(Self {
-            reader,
             broadcaster,
             http_client,
             replay_delay: Duration::from_millis(replay_delay_ms as u64),
         })
     }
 
-    pub async fn start(self) -> Result<()> {
+    pub async fn replay(&mut self, path: String) -> Result<()> {
+        info!("replaying file {:?}", path);
+        let f = File::open(&path).await?;
+        let f = BufReader::new(f);
+        if path.ends_with("gz") {
+            info!("gz detected, treating as gz");
+            let reader = async_compression::tokio::bufread::GzipDecoder::new(f);
+            let reader = BufReader::new(reader);
+            self.run(reader).await
+        } else {
+            self.run(f).await
+        }
+    }
+
+    pub async fn run<R>(&mut self, reader: R) -> Result<()>
+    where
+        R: AsyncBufRead + Unpin,
+    {
         let mut cnt = 0;
-        let mut lines = self.reader.lines();
-        while let Some(line) = lines.next_line().await? {
+        let mut lines = reader.lines();
+        loop {
+            let line = lines.next_line().await.context("Failed to parse line")?;
+            let line = match line {
+                Some(l) => l,
+                None => {
+                    info!("replay file finished.");
+                    break Ok(());
+                }
+            };
             let packet: Packet = serde_json::from_str(&line)?;
 
             use crate::influx::RoomInfo;
@@ -58,6 +78,5 @@ impl FileReplayer {
 
             self.broadcaster.send(packet)?;
         }
-        Ok(())
     }
 }
