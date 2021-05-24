@@ -149,6 +149,10 @@ impl Manager {
         info!("replay finished, waiting for all handlers to finish.");
 
         self.finish().await?;
+
+        // 异步模式再等一秒，等异步插入结束
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+
         Ok(())
     }
 
