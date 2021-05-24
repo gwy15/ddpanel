@@ -76,7 +76,7 @@ async fn main() -> Result<()> {
     }
 
     if !opts.no_influx {
-        let buffer_size = if opts.replay.is_some() { 64 } else { 0 };
+        let buffer_size = if opts.replay.is_some() { 128 } else { 0 };
         manager = manager.influx_appender(opts.influx_client()?, buffer_size);
     }
     if !opts.no_file {

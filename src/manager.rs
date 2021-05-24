@@ -53,6 +53,7 @@ impl Manager {
         Ok(self)
     }
 
+    /// 增加一个 influx 插入，buffer size >0 才有效
     pub fn influx_appender(mut self, influx_client: InfluxClient, buffer_size: usize) -> Self {
         let receiver = self.packet_channel.subscribe();
         let mut appender = InfluxAppender::new(influx_client, receiver);
