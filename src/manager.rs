@@ -26,8 +26,7 @@ pub struct Manager {
     packet_channel: broadcast::Sender<Packet>,
     /// 接收到结束信号的时候，会向各个 monitor 发送结束信号
     monitor_terminate_senders: HashMap<u64, oneshot::Sender<()>>,
-    /// 实际上没用到
-    subscriber_terminate_senders: Vec<oneshot::Sender<()>>,
+
     /// 等待各个 subscriber 结束的 handler
     subscriber_handlers: Vec<tokio::task::JoinHandle<Result<()>>>,
 }
@@ -39,7 +38,6 @@ impl Manager {
         Self {
             packet_channel: packet_sender,
             monitor_terminate_senders: HashMap::new(),
-            subscriber_terminate_senders: vec![],
             subscriber_handlers: vec![],
         }
     }
@@ -49,10 +47,7 @@ impl Manager {
         let receiver = self.packet_channel.subscribe();
         let appender = FileAppender::new(path, receiver).await?;
 
-        let (terminate_tx, terminate_rx) = oneshot::channel();
-        self.subscriber_terminate_senders.push(terminate_tx);
-
-        let handler = tokio::spawn(appender.start(terminate_rx));
+        let handler = tokio::spawn(appender.start());
         self.subscriber_handlers.push(handler);
 
         Ok(self)
@@ -62,13 +57,10 @@ impl Manager {
         let receiver = self.packet_channel.subscribe();
         let mut appender = InfluxAppender::new(influx_client, receiver);
         if buffer_size > 0 {
-            appender = appender.buffer(buffer_size);
+            appender = appender.buffer_size(buffer_size);
         }
 
-        let (terminate_tx, terminate_rx) = oneshot::channel();
-        self.subscriber_terminate_senders.push(terminate_tx);
-
-        let handler = tokio::spawn(appender.start(terminate_rx));
+        let handler = tokio::spawn(appender.start());
         self.subscriber_handlers.push(handler);
 
         self

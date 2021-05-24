@@ -2,6 +2,8 @@ mod messages;
 
 mod influx_appender;
 pub use influx_appender::InfluxAppender;
+mod cached_client;
+pub use cached_client::CachedInfluxClient;
 
 /// influx 最好有额外的信息（房间名）
 pub struct RoomInfo {

@@ -5,10 +5,7 @@ use std::time::{Duration, Instant};
 use tokio::{
     fs::{File, OpenOptions},
     io::{AsyncWriteExt, BufWriter},
-    sync::{
-        broadcast::{self, error::RecvError},
-        oneshot,
-    },
+    sync::broadcast::{self, error::RecvError},
 };
 
 /// 两秒写一次数据
@@ -34,19 +31,11 @@ impl FileAppender {
         })
     }
 
-    pub async fn start(mut self, terminate_receiver: oneshot::Receiver<()>) -> Result<()> {
-        tokio::select! {
-            _ = terminate_receiver => {
-                info!("terminate.");
-                self.flush_and_swap().await?;
-                Ok(())
-            },
-            r = self.start_writer() => {
-                info!("file appender flushing.");
-                self.flush_and_swap().await?;
-                r
-            }
-        }
+    pub async fn start(mut self) -> Result<()> {
+        let r = self.start_writer().await;
+        info!("file appender flushing.");
+        self.flush_and_swap().await?;
+        r
     }
 
     async fn make_writer(path: &str) -> Result<(BufWriter<File>, Date<Local>)> {
