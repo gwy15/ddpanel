@@ -5,6 +5,7 @@ use std::fmt::{self, Display, Formatter};
 pub struct UserToastMsg {
     #[serde(rename = "uid")]
     sender_id: u64,
+    /// 金瓜子，但是是总价，会随着 num 变，离谱
     #[serde(rename = "price")]
     price_milli: u32,
 
@@ -15,7 +16,7 @@ pub struct UserToastMsg {
 }
 impl UserToastMsg {
     pub fn price(&self) -> f64 {
-        (self.price_milli * self.num) as f64 * 0.001
+        (self.price_milli) as f64 * 0.001
     }
 }
 impl Display for UserToastMsg {
