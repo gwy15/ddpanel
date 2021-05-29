@@ -19,7 +19,7 @@ use manager::Manager;
 
 #[derive(Debug, clap::Clap)]
 struct Opts {
-    #[clap(long = "record-output", short = 'o', default_value = "recorded-%.json")]
+    #[clap(long = "record-output", short = 'o', default_value = "recorded-%.json.gz")]
     record_file: String,
 
     #[clap(

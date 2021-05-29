@@ -1,20 +1,26 @@
 use anyhow::Result;
+use async_compression::tokio::write::GzipEncoder;
 use biliapi::ws_protocol::Packet;
 use chrono::{Date, Local};
-use std::time::{Duration, Instant};
+use std::{
+    pin::Pin,
+    time::{Duration, Instant},
+};
 use tokio::{
     fs::{File, OpenOptions},
-    io::{AsyncWriteExt, BufWriter},
+    io::{AsyncWrite, AsyncWriteExt, BufWriter},
     sync::broadcast::{self, error::RecvError},
 };
 
 /// 两秒写一次数据
 const MAX_FLUSH: Duration = Duration::from_secs(2);
 
+type Writer = Pin<Box<dyn AsyncWrite + Send>>;
+
 pub struct FileAppender {
     count: u64,
     path: String,
-    writer: BufWriter<File>,
+    writer: Writer,
     writer_date: Date<Local>,
     receiver: broadcast::Receiver<Packet>,
 }
@@ -33,23 +39,32 @@ impl FileAppender {
 
     pub async fn start(mut self) -> Result<()> {
         let r = self.start_writer().await;
-        info!("file appender flushing.");
-        self.flush_and_swap().await?;
+        info!("file appender closing.");
+        self.writer.flush().await?;
+        self.writer.shutdown().await?;
         r
     }
 
-    async fn make_writer(path: &str) -> Result<(BufWriter<File>, Date<Local>)> {
+    async fn make_writer(path: &str) -> Result<(Writer, Date<Local>)> {
         let date = Local::today();
         let path = path.replace("%", &date.format("%Y-%m-%d").to_string());
         info!("file will be written to {}", path);
-        let file = OpenOptions::new()
+        let file: File = OpenOptions::new()
             .write(true)
             .append(true)
             .create(true)
             .open(&path)
             .await?;
         let writer = BufWriter::new(file);
-        Ok((writer, date))
+        if path.ends_with(".gz") {
+            info!("file will be encoded in gzip");
+            let writer = GzipEncoder::new(writer);
+            let writer: Writer = Box::pin(writer);
+            Ok((writer, date))
+        } else {
+            let writer: Writer = Box::pin(writer);
+            Ok((writer, date))
+        }
     }
 
     async fn start_writer(&mut self) -> Result<()> {
@@ -95,6 +110,7 @@ impl FileAppender {
     async fn flush_and_swap(&mut self) -> Result<()> {
         self.writer.flush().await?;
         if Local::today() != self.writer_date {
+            self.writer.shutdown().await?;
             let (writer, date) = Self::make_writer(&self.path).await?;
             self.writer = writer;
             self.writer_date = date;
