@@ -2,7 +2,7 @@
 
 use std::{collections::HashMap, path::PathBuf};
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 use biliapi::ws_protocol::Packet;
 use influxdb_client::Client as InfluxClient;
 use parking_lot::RwLock;
@@ -108,7 +108,7 @@ impl Manager {
                         // safety: stop_id 一定在 cur_tasks 中
                         let sender = self.monitor_terminate_senders.remove(stop_id).unwrap();
                         if sender.send(()).is_err() {
-                            bail!(
+                            error!(
                                 "Send terminate to id {} but the monitor is already dead.",
                                 stop_id
                             );
