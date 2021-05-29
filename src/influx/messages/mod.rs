@@ -50,8 +50,10 @@ mod popularity;
 mod send_gift;
 mod super_chat;
 mod user_toast_msg;
+mod danmu;
 
 pub use popularity::Popularity;
 pub use send_gift::SendGift;
 pub use super_chat::SuperChat;
 pub use user_toast_msg::UserToastMsg;
+pub use danmu::Danmu;

@@ -9,7 +9,7 @@ use tokio::{
     time,
 };
 
-use super::{messages::*, CachedInfluxClient, RoomInfo};
+use super::{messages::*, CachedInfluxClient, DanmuCounter, RoomInfo};
 
 const FLUSH_INTERVAL: Duration = Duration::from_secs(2);
 
@@ -20,6 +20,8 @@ pub struct InfluxAppender {
     client: CachedInfluxClient,
     /// 接收 packet
     packets_receiver: broadcast::Receiver<Packet>,
+
+    danmu_counter: DanmuCounter,
 }
 
 impl InfluxAppender {
@@ -28,6 +30,7 @@ impl InfluxAppender {
         Self {
             client,
             packets_receiver,
+            danmu_counter: DanmuCounter::new(),
         }
     }
 
@@ -141,7 +144,11 @@ impl InfluxAppender {
                 guard.into_point(room_info, t)
             }
             "DANMU_MSG" => {
-                // TODO: 统计弹幕
+                // 统计弹幕，一秒打一次
+                self.danmu_counter.count(room_info.id, t);
+                for pt in self.danmu_counter.flush() {
+                    self.client.insert_point(pt).await?;
+                }
                 return Ok(());
             }
             _ => return Ok(()),
