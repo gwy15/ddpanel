@@ -1,5 +1,5 @@
 [package]
-name = "ddpanel-recorder"
+name = "ddpanel"
 version = "0.1.0"
 authors = ["gwy15 <gwy15thu@gmail.com>"]
 edition = "2018"
