@@ -52,12 +52,32 @@ impl TaskFactory {
                 }
             }
             tokio::select! {
-                _ = tokio::signal::ctrl_c() => {
+                _ = Self::stop_signal() => {
                     std::mem::drop(self.sender);
                     info!("ctrl+c received, stopping task_factory.");
                     return Ok(());
                 }
                 _ = tokio::time::sleep(REFRESH_DURATION) => {}
+            }
+        }
+    }
+
+    #[cfg(not(unix))]
+    async fn stop_signal() {
+        let _ = tokio::signal::ctrl_c().await.unwrap();
+    }
+
+    #[cfg(unix)]
+    async fn stop_signal() {
+        use tokio::signal;
+        let mut sigterm = signal::unix::signal(signal::unix::SignalKind::terminate()).unwrap();
+
+        tokio::select! {
+            _ = signal::ctrl_c() => {
+                info!("ctrl-c received. quitting.");
+            },
+            _ = sigterm.recv() => {
+                info!("SIGTERM recived. quitting.");
             }
         }
     }
