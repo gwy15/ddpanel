@@ -73,8 +73,11 @@ impl Opts {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    dotenv::dotenv()?;
+    if let Err(e) = dotenv::dotenv() {
+        debug!(".env not found. skip.");
+    }
     log4rs::init_file("log4rs.yml", Default::default())?;
+    debug!("log4rs initialized.");
 
     let mut opts = Opts::parse();
 
