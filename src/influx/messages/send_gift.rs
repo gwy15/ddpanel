@@ -17,6 +17,9 @@ pub struct SendGift {
 
     #[serde(rename = "uid", deserialize_with = "super::u64_from_value")]
     sender_id: u64,
+
+    #[serde(rename = "uname")]
+    sender_name: String,
 }
 impl SendGift {
     pub fn price(&self) -> f64 {
@@ -47,16 +50,18 @@ impl Display for SendGift {
 impl super::ToPoint for SendGift {
     fn into_basic_point(self) -> Point {
         if !self.is_free() {
+            let price = self.price();
             Point::new("live-gift")
                 .tag("type", "gift")
-                .tag("gift_name", self.gift_name.as_str())
-                .tag("sender", self.sender_id as i64)
+                .tag("gift_name", self.gift_name)
+                .tag("sender", self.sender_id.to_string())
+                .tag("sender_name", self.sender_name.as_str())
                 .field("num", self.num as i64)
-                .field("price", self.price())
+                .field("price", price)
         } else {
             Point::new("live-gift")
                 .tag("type", "free")
-                .tag("gift_name", self.gift_name.as_str())
+                .tag("gift_name", self.gift_name)
                 .field("num", self.num as i64)
                 .field("coin", self.price_milli as f64)
         }

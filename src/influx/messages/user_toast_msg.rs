@@ -5,6 +5,10 @@ use std::fmt::{self, Display, Formatter};
 pub struct UserToastMsg {
     #[serde(rename = "uid")]
     sender_id: u64,
+
+    #[serde(rename = "username")]
+    sender_name: String,
+
     /// 金瓜子，但是是总价，会随着 num 变，离谱
     #[serde(rename = "price")]
     price_milli: u32,
@@ -31,11 +35,13 @@ impl Display for UserToastMsg {
 }
 impl super::ToPoint for UserToastMsg {
     fn into_basic_point(self) -> Point {
+        let price = self.price();
         Point::new("live-gift")
             .tag("type", "guard")
-            .tag("gift_name", self.gift_name.as_str())
-            .tag("sender", self.sender_id as i64)
+            .tag("gift_name", self.gift_name)
+            .tag("sender", self.sender_id.to_string())
+            .tag("sender_name", self.sender_name.as_str())
             .field("num", self.num as i64)
-            .field("price", self.price())
+            .field("price", price)
     }
 }

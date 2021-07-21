@@ -143,7 +143,9 @@ impl InfluxAppender {
                 info!("舰长: {} @ {}", guard, room_info.streamer);
                 guard.into_point(room_info, t)
             }
-            "DANMU_MSG" => {
+            // 什么猪鼻名字
+            // DANMU_MSG:4:0:2:2:2:0
+            cmd if cmd.starts_with("DANMU_MSG") => {
                 // 统计弹幕，一秒打一次
                 self.danmu_counter.count(room_info.id, t);
                 for pt in self.danmu_counter.flush() {
@@ -151,7 +153,10 @@ impl InfluxAppender {
                 }
                 return Ok(());
             }
-            _ => return Ok(()),
+            _cmd => {
+                // debug!("cmd = {}", cmd);
+                return Ok(());
+            },
         };
         self.client.insert_point(point).await?;
         Ok(())

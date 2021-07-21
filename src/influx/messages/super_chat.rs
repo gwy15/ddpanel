@@ -1,6 +1,11 @@
 use influxdb_client::Point;
 use std::fmt::{self, Display, Formatter};
 
+#[derive(Debug, Deserialize)]
+struct UserInfo {
+    uname: String,
+}
+
 // super chat
 #[derive(Debug, Deserialize)]
 pub struct SuperChat {
@@ -9,6 +14,8 @@ pub struct SuperChat {
     //
     #[serde(rename = "uid", deserialize_with = "super::u64_from_value")]
     sender_id: u64,
+
+    user_info: UserInfo,
 }
 impl SuperChat {
     pub fn price(&self) -> f64 {
@@ -22,10 +29,12 @@ impl Display for SuperChat {
 }
 impl super::ToPoint for SuperChat {
     fn into_basic_point(self) -> Point {
+        let price = self.price();
         Point::new("live-gift")
             .tag("type", "superchat")
             .tag("gift_name", "superchat")
-            .tag("sender", self.sender_id as i64)
-            .field("price", self.price())
+            .tag("sender", self.sender_id.to_string())
+            .tag("sender_name", self.user_info.uname)
+            .field("price", price)
     }
 }

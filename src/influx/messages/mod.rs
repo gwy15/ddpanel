@@ -16,7 +16,7 @@ pub trait ToPoint: Sized {
 
     fn into_point(self, room_info: &RoomInfo, t: DateTime<Local>) -> Point {
         self.into_basic_point()
-            .tag("room_id", room_info.id as i64)
+            .tag("room_id", room_info.id.to_string())
             .tag("streamer", room_info.streamer.as_str())
             .timestamp(t.timestamp_millis())
     }
@@ -46,14 +46,14 @@ where
     }
 }
 
+mod danmu;
 mod popularity;
 mod send_gift;
 mod super_chat;
 mod user_toast_msg;
-mod danmu;
 
+pub use danmu::Danmu;
 pub use popularity::Popularity;
 pub use send_gift::SendGift;
 pub use super_chat::SuperChat;
 pub use user_toast_msg::UserToastMsg;
-pub use danmu::Danmu;
