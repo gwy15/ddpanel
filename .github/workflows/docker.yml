@@ -21,7 +21,6 @@ jobs:
         with:
           images: |
             gwy15/ddpanel
-            ccr.ccs.tencentyun.com/gwy15/ddpanel
           tags: |
             type=ref,event=branch
             type=semver,pattern={{version}}
@@ -33,13 +32,13 @@ jobs:
         with:
           username: gwy15
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - name: Login to tencentyun Docker mirror
-        if: github.event_name != 'pull_request'
-        uses: docker/login-action@v1
-        with:
-          registry: ccr.ccs.tencentyun.com
-          username: ${{ secrets.TX_DOCKER_USER }}
-          password: ${{ secrets.TX_DOCKER_PSWD }}
+      # - name: Login to tencentyun Docker mirror
+      #   if: github.event_name != 'pull_request'
+      #   uses: docker/login-action@v1
+      #   with:
+      #     registry: ccr.ccs.tencentyun.com
+      #     username: ${{ secrets.TX_DOCKER_USER }}
+      #     password: ${{ secrets.TX_DOCKER_PSWD }}
 
       - name: Build and push
         uses: docker/build-push-action@v2
