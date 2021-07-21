@@ -57,12 +57,17 @@ struct Opts {
 
 impl Opts {
     pub fn influx_client(&self) -> Result<InfluxClient> {
-        Ok(
-            InfluxClient::new("http://127.0.0.1:8086", std::env::var("INFLUX_TOKEN")?)?
-                .with_org("ddpanel")
-                .with_bucket("ddpanel")
-                .with_precision(Precision::MS),
-        )
+        const DEFAULT_ADDR: &str = "127.0.0.1:8086";
+        let domain = std::env::var("INFLUX_ADDR").unwrap_or_else(|_e| {
+            info!("using default address {}", DEFAULT_ADDR);
+            DEFAULT_ADDR.to_string()
+        });
+        let host = format!("http://{}", domain);
+        let token = std::env::var("INFLUX_TOKEN")?;
+        Ok(InfluxClient::new(host, token)?
+            .with_org("ddpanel")
+            .with_bucket("ddpanel")
+            .with_precision(Precision::MS))
     }
 }
 
