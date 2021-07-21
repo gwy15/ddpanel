@@ -73,7 +73,7 @@ impl Opts {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    if let Err(e) = dotenv::dotenv() {
+    if dotenv::dotenv().is_err() {
         debug!(".env not found. skip.");
     }
     log4rs::init_file("log4rs.yml", Default::default())?;
