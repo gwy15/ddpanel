@@ -36,5 +36,6 @@ impl super::ToPoint for SuperChat {
             .tag("sender", self.sender_id.to_string())
             .tag("sender_name", self.user_info.uname)
             .field("price", price)
+            .field("num", 1.0)
     }
 }
