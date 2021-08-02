@@ -1,7 +1,7 @@
 use anyhow::Result;
 use async_compression::tokio::write::GzipEncoder;
-use biliapi::ws_protocol::Packet;
 use chrono::{Date, Local};
+use serde::Serialize;
 use std::{
     pin::Pin,
     time::{Duration, Instant},
@@ -17,16 +17,16 @@ const MAX_FLUSH: Duration = Duration::from_secs(2);
 
 type Writer = Pin<Box<dyn AsyncWrite + Send>>;
 
-pub struct FileAppender {
+pub struct FileAppender<T> {
     count: u64,
     path: String,
     writer: Writer,
     writer_date: Date<Local>,
-    receiver: broadcast::Receiver<Packet>,
+    receiver: broadcast::Receiver<T>,
 }
 
-impl FileAppender {
-    pub async fn new(path: String, receiver: broadcast::Receiver<Packet>) -> Result<Self> {
+impl<T: Serialize + Clone> FileAppender<T> {
+    pub async fn new(path: String, receiver: broadcast::Receiver<T>) -> Result<Self> {
         let (writer, date) = Self::make_writer(&path).await?;
         Ok(Self {
             count: 0,
@@ -93,7 +93,7 @@ impl FileAppender {
         }
     }
 
-    async fn write_packet(&mut self, packet: Packet) -> Result<()> {
+    async fn write_packet(&mut self, packet: T) -> Result<()> {
         self.count += 1;
         self.writer
             .write_all(serde_json::to_string(&packet)?.as_bytes())

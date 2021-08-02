@@ -49,10 +49,14 @@ impl Manager {
     }
 
     /// add file appender (consumer)
-    pub async fn file_appender(mut self, path: String) -> Result<Self> {
+    pub async fn file_appender(mut self, live_path: String, bili_path: String) -> Result<Self> {
         let receiver = self.packet_channel.subscribe();
-        let appender = FileAppender::new(path, receiver).await?;
+        let appender = FileAppender::new(live_path, receiver).await?;
+        let handler = tokio::spawn(appender.start());
+        self.subscriber_handlers.push(handler);
 
+        let receiver = self.spider_channel.subscribe();
+        let appender = FileAppender::new(bili_path, receiver).await?;
         let handler = tokio::spawn(appender.start());
         self.subscriber_handlers.push(handler);
 

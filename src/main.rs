@@ -13,8 +13,8 @@ mod influx;
 mod manager;
 mod monitor;
 mod replayer;
-mod task_factory;
 mod spider;
+mod task_factory;
 
 use manager::Manager;
 
@@ -26,6 +26,9 @@ struct Opts {
         default_value = "recorded-%.json.gz"
     )]
     record_file: String,
+
+    #[clap(long = "bili-output", short = 'o', default_value = "bili-%.json.gz")]
+    bili_file: String,
 
     #[clap(
         long = "no-file",
@@ -93,7 +96,9 @@ async fn main() -> Result<()> {
         manager = manager.influx_appender(opts.influx_client()?, buffer_size);
     }
     if !opts.no_file {
-        manager = manager.file_appender(opts.record_file).await?;
+        manager = manager
+            .file_appender(opts.record_file, opts.bili_file)
+            .await?;
     }
     if opts.no_file && opts.no_influx {
         // 至少要一个 appender 才可以
