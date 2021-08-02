@@ -27,6 +27,9 @@ toml = "0.5.8"
 
 
 biliapi = "0.1.10-beta.4"
+# cookie 持久化
+cookie_store = "0.15.0"
+reqwest_cookie_store = "0.2.0"
 influxdb-client = { version = "*", git = "https://github.com/gwy15/influxdb-client-rs.git", branch = "misc" }
 
 # for room info

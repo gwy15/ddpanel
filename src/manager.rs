@@ -107,7 +107,7 @@ impl Manager {
     }
 
     /// run with task factory, never end
-    pub async fn start(mut self, task_file: PathBuf) -> Result<()> {
+    pub async fn start(mut self, task_file: PathBuf, cookie_path: PathBuf) -> Result<()> {
         let http_client = biliapi::connection::new_client()?;
 
         let mut task_receiver = TaskFactory::start(task_file);
@@ -115,6 +115,7 @@ impl Manager {
         let spider = crate::spider::Spider::new(
             self.spider_tasks_channel.1.clone(),
             self.spider_channel.clone(),
+            cookie_path,
         );
         let (tx, rx) = oneshot::channel();
         tokio::spawn(spider.start(rx));

@@ -57,6 +57,14 @@ struct Opts {
         about = "The file to watch"
     )]
     watch: PathBuf,
+
+    #[clap(
+        long = "cookie",
+        short = 'c',
+        default_value = "cookies.json",
+        about = "cookies for bilibili client"
+    )]
+    cookie_path: PathBuf,
 }
 
 impl Opts {
@@ -110,7 +118,7 @@ async fn main() -> Result<()> {
         manager.replay(replay, opts.replay_delay_ms).await?;
     } else {
         // start record
-        manager.start(opts.watch).await?;
+        manager.start(opts.watch, opts.cookie_path).await?;
     }
 
     Ok(())

@@ -1,3 +1,5 @@
+use std::path::Path;
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::*;
@@ -6,7 +8,10 @@ use biliapi::{
     Request,
 };
 use chrono::{DateTime, Utc};
+use cookie_store::CookieStore;
 use influxdb_client::Point;
+use reqwest::Client;
+use reqwest_cookie_store::CookieStoreMutex;
 use serde::{Deserialize, Serialize};
 use tokio::sync::{broadcast, oneshot, watch};
 
@@ -48,9 +53,13 @@ pub struct Spider {
 }
 
 impl Spider {
-    pub fn new(tasks: watch::Receiver<TaskSet>, publish: broadcast::Sender<SpiderInfo>) -> Self {
-        // TODO: load client
-        let client = reqwest::Client::new();
+    pub fn new(
+        tasks: watch::Receiver<TaskSet>,
+        publish: broadcast::Sender<SpiderInfo>,
+        path: impl AsRef<Path>,
+    ) -> Self {
+        // load client
+        let (client, _) = persisted_client(path).unwrap();
         Self {
             tasks,
             publish,
@@ -117,4 +126,27 @@ impl Spider {
 
         Ok(())
     }
+}
+
+/// 从文件解析出 CookieStore
+fn load_persisted_cookie_store_from_file(path: impl AsRef<Path>) -> Result<CookieStore> {
+    let cookies = std::fs::read_to_string(path.as_ref())?;
+    CookieStore::load_json(cookies.as_bytes()).map_err(|e| anyhow!(e))
+}
+
+/// 从 cookie 文件获取持久化的客户端
+fn persisted_client(cookie_json: impl AsRef<Path>) -> Result<(Client, Arc<CookieStoreMutex>)> {
+    let cookies = load_persisted_cookie_store_from_file(cookie_json).unwrap_or_else(|e| {
+        warn!("failed to load cookies: {:?}", e);
+        CookieStore::default()
+    });
+
+    let cookies = Arc::new(CookieStoreMutex::new(cookies));
+
+    let client = reqwest::ClientBuilder::new()
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.164 Safari/537.36")
+        .cookie_provider(Arc::clone(&cookies))
+        .build()?;
+
+    Ok((client, cookies))
 }
