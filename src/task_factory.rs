@@ -1,4 +1,5 @@
-use std::{collections::HashSet, num::ParseIntError, path::PathBuf, time::Duration};
+use serde::Deserialize;
+use std::{collections::HashSet, path::PathBuf, time::Duration};
 
 use anyhow::{Context, Result};
 use tokio::sync::mpsc;
@@ -7,14 +8,20 @@ const REFRESH_DURATION: Duration = Duration::from_secs(10);
 
 pub type TaskSet = HashSet<u64>;
 
+#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
+pub struct Config {
+    pub live_rooms: TaskSet,
+    pub users: TaskSet,
+}
+
 pub struct TaskFactory {
     task_file: PathBuf,
-    sender: mpsc::Sender<TaskSet>,
-    last: Option<TaskSet>,
+    sender: mpsc::Sender<Config>,
+    last: Option<Config>,
 }
 
 impl TaskFactory {
-    pub fn start(task_file: PathBuf) -> mpsc::Receiver<TaskSet> {
+    pub fn start(task_file: PathBuf) -> mpsc::Receiver<Config> {
         let (sender, receiver) = mpsc::channel(5);
         let factory = Self {
             task_file,
@@ -31,7 +38,7 @@ impl TaskFactory {
             match self.load_tasks().await {
                 Ok(tasks) => match self.last.as_ref() {
                     None => {
-                        info!("task initialized => {} tasks = {:?}", tasks.len(), tasks);
+                        info!("task initialized => tasks = {:?}", tasks);
                         self.last = Some(tasks.clone());
                         self.sender.send(tasks).await?;
                     }
@@ -82,29 +89,29 @@ impl TaskFactory {
         }
     }
 
-    async fn load_tasks(&self) -> Result<TaskSet> {
+    async fn load_tasks(&self) -> Result<Config> {
         let content = tokio::fs::read_to_string(&self.task_file).await?;
         Self::parse_content(&content).context("Failed to parse task file")
     }
 
-    fn parse_content(content: &str) -> Result<TaskSet> {
-        let mut tasks = TaskSet::new();
-        for line in content.lines() {
-            let line = line.trim();
-            if line.is_empty() {
-                continue;
-            }
-            if line.starts_with('#') || line.starts_with("//") {
-                continue;
-            }
-            let line: TaskSet = line
-                .split(',')
-                .map(|s| s.trim())
-                .filter(|s| !s.is_empty())
-                .map(|s| s.parse())
-                .collect::<Result<TaskSet, ParseIntError>>()?;
-            tasks.extend(line);
-        }
+    fn parse_content(content: &str) -> Result<Config> {
+        let tasks = toml::from_str(content)?;
+        // for line in content.lines() {
+        //     let line = line.trim();
+        //     if line.is_empty() {
+        //         continue;
+        //     }
+        //     if line.starts_with('#') || line.starts_with("//") {
+        //         continue;
+        //     }
+        //     let line: TaskSet = line
+        //         .split(',')
+        //         .map(|s| s.trim())
+        //         .filter(|s| !s.is_empty())
+        //         .map(|s| s.parse())
+        //         .collect::<Result<TaskSet, ParseIntError>>()?;
+        //     tasks.extend(line);
+        // }
         Ok(tasks)
     }
 }

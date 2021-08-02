@@ -39,9 +39,10 @@ impl<T: Serialize + Clone> FileAppender<T> {
 
     pub async fn start(mut self) -> Result<()> {
         let r = self.start_writer().await;
-        info!("file appender closing.");
+        debug!("file appender {} closing.", self.path);
         self.writer.flush().await?;
         self.writer.shutdown().await?;
+        info!("file {} appender closed.", self.path);
         r
     }
 

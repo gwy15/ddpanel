@@ -27,7 +27,7 @@ struct Opts {
     )]
     record_file: String,
 
-    #[clap(long = "bili-output", short = 'o', default_value = "bili-%.json.gz")]
+    #[clap(long = "bili-output", short = 'b', default_value = "bili-%.json.gz")]
     bili_file: String,
 
     #[clap(
@@ -53,8 +53,8 @@ struct Opts {
     #[clap(
         long = "watch",
         short = 'w',
-        default_value = "watch_rooms",
-        about = "The room file to watch"
+        default_value = "watch.toml",
+        about = "The file to watch"
     )]
     watch: PathBuf,
 }

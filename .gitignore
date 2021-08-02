@@ -10,6 +10,6 @@ grafana
 influxdb
 
 logs
-watch_rooms
+watch.toml
 
-recorded*
+*.json.gz

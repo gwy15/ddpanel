@@ -6,7 +6,7 @@ use anyhow::Result;
 use biliapi::ws_protocol::Packet;
 use influxdb_client::Client as InfluxClient;
 use parking_lot::RwLock;
-use tokio::sync::{broadcast, oneshot};
+use tokio::sync::{broadcast, oneshot, watch};
 
 use crate::{
     file_appender::FileAppender,
@@ -31,6 +31,10 @@ pub struct Manager {
     /// 等待各个 subscriber 结束的 handler
     subscriber_handlers: Vec<tokio::task::JoinHandle<Result<()>>>,
 
+    /// 爬虫停止
+    spider_stop: Option<oneshot::Sender<()>>,
+    /// 爬虫任务发布
+    spider_tasks_channel: (watch::Sender<TaskSet>, watch::Receiver<TaskSet>),
     /// 爬虫信息通道
     spider_channel: broadcast::Sender<SpiderInfo>,
 }
@@ -38,13 +42,16 @@ pub struct Manager {
 impl Manager {
     pub fn new() -> Self {
         let (packet_sender, _) = broadcast::channel::<Packet>(10_000);
-        let (spider_sender, _) = broadcast::channel::<SpiderInfo>(1_000);
+        let (spider_channel, _) = broadcast::channel::<SpiderInfo>(1_000);
+        let spider_tasks_channel = watch::channel(Default::default());
 
         Self {
             packet_channel: packet_sender,
             monitor_terminate_senders: HashMap::new(),
             subscriber_handlers: vec![],
-            spider_channel: spider_sender,
+            spider_stop: None,
+            spider_tasks_channel,
+            spider_channel,
         }
     }
 
@@ -104,17 +111,28 @@ impl Manager {
         let http_client = biliapi::connection::new_client()?;
 
         let mut task_receiver = TaskFactory::start(task_file);
+
+        let spider = crate::spider::Spider::new(
+            self.spider_tasks_channel.1.clone(),
+            self.spider_channel.clone(),
+        );
+        let (tx, rx) = oneshot::channel();
+        tokio::spawn(spider.start(rx));
+        self.spider_stop = Some(tx);
+
         // 一直等到 task_receiver 结束
         loop {
             let recv = task_receiver.recv().await;
             match recv {
                 Some(tasks) => {
+                    let live_rooms = tasks.live_rooms;
+
                     // check for tasks
-                    let cur_tasks: TaskSet =
+                    let cur_rooms: TaskSet =
                         self.monitor_terminate_senders.keys().cloned().collect();
                     // terminate old tasks
-                    let stop_tasks = cur_tasks.difference(&tasks);
-                    for stop_id in stop_tasks {
+                    let stop_rooms = cur_rooms.difference(&live_rooms);
+                    for stop_id in stop_rooms {
                         info!("Stopping monitor room {}", stop_id);
                         // safety: stop_id 一定在 cur_tasks 中
                         let sender = self.monitor_terminate_senders.remove(stop_id).unwrap();
@@ -126,8 +144,8 @@ impl Manager {
                         };
                     }
                     // start new tasks
-                    let new_tasks = tasks.difference(&cur_tasks);
-                    for &new_id in new_tasks {
+                    let new_rooms = live_rooms.difference(&cur_rooms);
+                    for &new_id in new_rooms {
                         info!("start new monitor room: {}", new_id);
                         let (terminate_sender, terminate_receiver) = oneshot::channel();
                         let monitor =
@@ -135,6 +153,14 @@ impl Manager {
                         tokio::spawn(monitor.start(terminate_receiver));
                         self.monitor_terminate_senders
                             .insert(new_id, terminate_sender);
+                    }
+
+                    // send to spider
+                    match self.spider_tasks_channel.0.send(tasks.users) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!("failed to send tasks on spider tasks chanel: {:?}", e);
+                        }
                     }
                 }
                 None => {
@@ -169,6 +195,12 @@ impl Manager {
     }
 
     pub async fn finish(self) -> Result<()> {
+        if let Some(t) = self.spider_stop {
+            if let Err(e) = t.send(()) {
+                warn!("failed to stop spider: {:?}", e);
+            }
+        }
+
         for (_id, terminator) in self.monitor_terminate_senders.into_iter() {
             if terminator.send(()).is_err() {
                 warn!("A monitor has already died.");
@@ -177,12 +209,14 @@ impl Manager {
 
         // drop the packet sender so that all receivers can stop
         std::mem::drop(self.packet_channel);
+        std::mem::drop(self.spider_channel);
 
         info!(
             "manger waiting for all processors to finish ({} processors)",
             self.subscriber_handlers.len()
         );
         for h in self.subscriber_handlers {
+            info!("waiting for handler to stop: {:?}", h);
             match h.await {
                 Ok(r) => {
                     info!("subscriber join result: {:?}", r);
@@ -198,12 +232,3 @@ impl Manager {
         Ok(())
     }
 }
-
-// impl Drop for Manager {
-//     fn drop(&mut self) {
-//         let packet_subscribers = std::mem::take(&mut self.subscriber_terminate_senders);
-//         packet_subscribers.into_iter().for_each(|tx| {
-//             tx.send(()).ok();
-//         });
-//     }
-// }
