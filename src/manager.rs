@@ -13,6 +13,7 @@ use crate::{
     influx::InfluxAppender,
     monitor::Monitor,
     replayer::FileReplayer,
+    spider::SpiderInfo,
     task_factory::{TaskFactory, TaskSet},
 };
 
@@ -29,16 +30,21 @@ pub struct Manager {
 
     /// 等待各个 subscriber 结束的 handler
     subscriber_handlers: Vec<tokio::task::JoinHandle<Result<()>>>,
+
+    /// 爬虫信息通道
+    spider_channel: broadcast::Sender<SpiderInfo>,
 }
 
 impl Manager {
     pub fn new() -> Self {
         let (packet_sender, _) = broadcast::channel::<Packet>(10_000);
+        let (spider_sender, _) = broadcast::channel::<SpiderInfo>(1_000);
 
         Self {
             packet_channel: packet_sender,
             monitor_terminate_senders: HashMap::new(),
             subscriber_handlers: vec![],
+            spider_channel: spider_sender,
         }
     }
 
@@ -55,8 +61,9 @@ impl Manager {
 
     /// 增加一个 influx 插入，buffer size >0 才有效
     pub fn influx_appender(mut self, influx_client: InfluxClient, buffer_size: usize) -> Self {
-        let receiver = self.packet_channel.subscribe();
-        let mut appender = InfluxAppender::new(influx_client, receiver);
+        let packets_receiver = self.packet_channel.subscribe();
+        let spider_receiver = self.spider_channel.subscribe();
+        let mut appender = InfluxAppender::new(influx_client, packets_receiver, spider_receiver);
         if buffer_size > 0 {
             appender = appender.buffer_size(buffer_size);
         }

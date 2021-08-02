@@ -14,6 +14,7 @@ mod manager;
 mod monitor;
 mod replayer;
 mod task_factory;
+mod spider;
 
 use manager::Manager;
 

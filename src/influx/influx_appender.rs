@@ -10,6 +10,7 @@ use tokio::{
 };
 
 use super::{messages::*, CachedInfluxClient, DanmuCounter, RoomInfo};
+use crate::spider::SpiderInfo;
 
 const FLUSH_INTERVAL: Duration = Duration::from_secs(2);
 
@@ -18,19 +19,26 @@ const FLUSH_INTERVAL: Duration = Duration::from_secs(2);
 /// 提供一个 async_writer 选项，在此模式下会将写入放到后台执行，默认开启
 pub struct InfluxAppender {
     client: CachedInfluxClient,
-    /// 接收 packet
+    /// 接收直播的 packet
     packets_receiver: broadcast::Receiver<Packet>,
-
+    /// 直播弹幕计数器
     danmu_counter: DanmuCounter,
+    /// 爬虫信息接收
+    spider_receiver: broadcast::Receiver<SpiderInfo>,
 }
 
 impl InfluxAppender {
-    pub fn new(client: InfluxClient, packets_receiver: broadcast::Receiver<Packet>) -> Self {
+    pub fn new(
+        client: InfluxClient,
+        packets_receiver: broadcast::Receiver<Packet>,
+        spider_receiver: broadcast::Receiver<SpiderInfo>,
+    ) -> Self {
         let client = CachedInfluxClient::new(client);
         Self {
             client,
             packets_receiver,
             danmu_counter: DanmuCounter::new(),
+            spider_receiver,
         }
     }
 
@@ -83,6 +91,25 @@ impl InfluxAppender {
                             return;
                         }
                     }
+                },
+                recv = self.spider_receiver.recv() => {
+                    match recv {
+                        Ok(packet) => match self.process_spider(packet).await {
+                            Ok(_) => {}
+                            Err(e) => {
+                                warn!("failed to process packet: {:?}", e);
+                            }
+                        },
+                        Err(RecvError::Lagged(cnt)) => {
+                            // NOTE: 允许丢包，主程序继续运行
+                            error!("Influxdb write too slow and lagged {} packets!", cnt);
+                            continue;
+                        }
+                        Err(RecvError::Closed) => {
+                            info!("packet publisher closed. influx appender stop.");
+                            return;
+                        }
+                    }
                 }
             }
         }
@@ -110,6 +137,12 @@ impl InfluxAppender {
             }
             _ => Ok(()),
         }
+    }
+
+    async fn process_spider(&mut self, packet: SpiderInfo) -> Result<()> {
+        let point = packet.into_point();
+        self.client.insert_point(point).await?;
+        Ok(())
     }
 
     async fn on_send_msg_reply(
