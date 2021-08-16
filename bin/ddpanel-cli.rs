@@ -14,8 +14,8 @@ use danmu::DanmuMsg;
 
 #[derive(Debug, clap::Clap)]
 struct Opts {
-    #[clap(long = "file", short = 'f', about = "file")]
-    file: String,
+    #[clap(long = "input", short = 'i', about = "input file")]
+    input: String,
 
     #[clap(long = "output", short = 'o', about = "output")]
     output: String,
@@ -70,14 +70,14 @@ async fn main() -> Result<()> {
 
     let opts = Opts::parse();
 
-    info!("replaying file {:?}", opts.file);
-    let f = File::open(&opts.file).await?;
+    info!("replaying file {:?}", opts.input);
+    let f = File::open(&opts.input).await?;
     let f = BufReader::new(f);
 
     let writer = File::create(opts.output).await?;
     let writer = BufWriter::new(writer);
 
-    let reader: Box<dyn AsyncBufRead + Unpin> = if opts.file.ends_with("gz") {
+    let reader: Box<dyn AsyncBufRead + Unpin> = if opts.input.ends_with("gz") {
         info!("gz detected, treating as gz");
         let reader = async_compression::tokio::bufread::GzipDecoder::new(f);
         Box::new(BufReader::new(reader))
