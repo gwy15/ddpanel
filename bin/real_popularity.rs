@@ -1,5 +1,5 @@
 //! 导出真实人气值
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;
@@ -30,7 +30,7 @@ fn line_parse(s: &str) -> Option<(u64, u64, DateTime<Utc>)> {
             panic!("{:?}", e);
         });
         danmu.user_id
-    } else if body.contains("SUPER_CHAT_MESSAGE\\") || body.contains("GUARD_BUY") {
+    } else if body.contains("SUPER_CHAT_MESSAGE\\") || body.contains("GUARD_BUY") || body.contains("SEND_GIFT") {
         let v: Value = serde_json::from_str(&body).unwrap();
         let uid = v
             .get("data")
@@ -62,15 +62,18 @@ pub async fn run(
     let mut lines_buffer: VecDeque<(u64, DateTime<Utc>)> = VecDeque::new();
     // user_id => times
     let mut user_count: HashMap<u64, u32> = HashMap::new();
+    // 总互动人数
+    let mut user_ids = HashSet::new();
 
     let mut lines = reader.lines();
-    while let Some(line) = lines.next_line().await? {
+    while let Ok(Some(line)) = lines.next_line().await {
         // 统计弹幕、舰长和superchat
         let (user_id, _room_id, time) = match line_parse(&line) {
             None => continue,
             Some((_, _room_id, _)) if _room_id != room_id => continue,
             Some((a, b, c)) => (a, b, c),
         };
+        user_ids.insert(user_id);
         lines_buffer.push_back((user_id, time));
         *user_count.entry(user_id).or_default() += 1;
         // 五分钟滑动窗口
@@ -100,6 +103,7 @@ pub async fn run(
     }
 
     info!("{} points", ans.len());
+    info!("当天总互动人数：{}", user_ids.len());
     let s = serde_json::to_string(&ans)?;
     output.write_all(s.as_bytes()).await?;
     output.flush().await?;
