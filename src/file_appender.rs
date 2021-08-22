@@ -1,6 +1,7 @@
 use anyhow::Result;
 use async_compression::tokio::write::GzipEncoder;
-use chrono::{Date, Local};
+use chrono::{Date, Utc};
+use chrono_tz::{Asia::Shanghai, Tz};
 use serde::Serialize;
 use std::{
     pin::Pin,
@@ -21,7 +22,7 @@ pub struct FileAppender<T> {
     count: u64,
     path: String,
     writer: Writer,
-    writer_date: Date<Local>,
+    writer_date: Date<Tz>,
     receiver: broadcast::Receiver<T>,
 }
 
@@ -46,8 +47,8 @@ impl<T: Serialize + Clone> FileAppender<T> {
         r
     }
 
-    async fn make_writer(path: &str) -> Result<(Writer, Date<Local>)> {
-        let date = Local::today();
+    async fn make_writer(path: &str) -> Result<(Writer, Date<Tz>)> {
+        let date = Utc::today().with_timezone(&Shanghai);
         let path = path.replace("%", &date.format("%Y-%m-%d").to_string());
         info!("file will be written to {}", path);
         let file: File = OpenOptions::new()
@@ -110,7 +111,7 @@ impl<T: Serialize + Clone> FileAppender<T> {
 
     async fn flush_and_swap(&mut self) -> Result<()> {
         self.writer.flush().await?;
-        if Local::today() != self.writer_date {
+        if Utc::today().with_timezone(&Shanghai) != self.writer_date {
             self.writer.shutdown().await?;
             let (writer, date) = Self::make_writer(&self.path).await?;
             self.writer = writer;
