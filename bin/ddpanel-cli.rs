@@ -1,65 +1,63 @@
 //! 导出弹幕文件
+#[macro_use]
+extern crate log;
+
 use anyhow::*;
 use chrono::{DateTime, Utc};
 use clap::Clap;
-use log::*;
 use serde::Deserialize;
 use tokio::{
     fs::File,
-    io::{AsyncBufRead, AsyncBufReadExt, AsyncWrite, AsyncWriteExt, BufReader, BufWriter},
+    io::{AsyncBufRead, BufReader, BufWriter},
 };
 
 mod danmu;
-use danmu::DanmuMsg;
+mod export_danmu;
+mod real_popularity;
+mod prelude {
+    pub use crate::danmu::DanmuMsg;
+    pub use crate::RawLine;
+    pub use anyhow::*;
+    pub use tokio::{
+        fs::File,
+        io::{AsyncBufRead, AsyncBufReadExt, AsyncWrite, AsyncWriteExt, BufReader, BufWriter},
+    };
+}
 
 #[derive(Debug, clap::Clap)]
-struct Opts {
+enum Action {
+    #[clap(about = "导出弹幕")]
+    ExportDanmu,
+    #[clap(about = "五分钟同接")]
+    Popularity,
+}
+
+#[derive(Debug, clap::Clap)]
+struct Options {
     #[clap(long = "input", short = 'i', about = "input file")]
     input: String,
 
-    #[clap(long = "output", short = 'o', about = "output")]
+    #[clap(
+        long = "output",
+        short = 'o',
+        about = "output",
+        default_value = "output.json"
+    )]
     output: String,
 
     #[clap(long = "room", short = 'r', about = "room_id")]
     room: u64,
+
+    #[clap(subcommand)]
+    action: Action,
 }
 
 #[derive(Debug, Deserialize)]
-struct RawLine {
+pub struct RawLine {
     operation: String,
     body: String,
     time: DateTime<Utc>,
     room_id: u64,
-}
-
-async fn run(
-    reader: impl AsyncBufRead + Unpin,
-    mut output: impl AsyncWrite + Unpin,
-    room_id: u64,
-) -> Result<()> {
-    let mut messages = vec![];
-
-    let mut lines = reader.lines();
-    while let Some(line) = lines.next_line().await? {
-        if !(line.contains("SendMsgReply") && line.contains("DANMU_MSG")) {
-            continue;
-        }
-        let line: RawLine = serde_json::from_str(&line)?;
-        if !(line.room_id == room_id && line.operation == "SendMsgReply") {
-            continue;
-        }
-        let danmu_msg: DanmuMsg = serde_json::from_str(&line.body)?;
-        messages.push(danmu_msg);
-    }
-
-    info!("{} 弹幕", messages.len());
-
-    let s = serde_json::to_string(&messages)?;
-    output.write_all(s.as_bytes()).await?;
-    output.flush().await?;
-    output.shutdown().await?;
-
-    Ok(())
 }
 
 #[tokio::main]
@@ -68,23 +66,30 @@ async fn main() -> Result<()> {
         pretty_env_logger::init_timed();
     }
 
-    let opts = Opts::parse();
+    let args = Options::parse();
 
-    info!("replaying file {:?}", opts.input);
-    let f = File::open(&opts.input).await?;
+    info!("replaying file {:?}", args.input);
+    let f = File::open(&args.input).await?;
     let f = BufReader::new(f);
 
-    let writer = File::create(opts.output).await?;
+    let writer = File::create(args.output).await?;
     let writer = BufWriter::new(writer);
 
-    let reader: Box<dyn AsyncBufRead + Unpin> = if opts.input.ends_with("gz") {
+    let reader: Box<dyn AsyncBufRead + Unpin> = if args.input.ends_with("gz") {
         info!("gz detected, treating as gz");
         let reader = async_compression::tokio::bufread::GzipDecoder::new(f);
         Box::new(BufReader::new(reader))
     } else {
         Box::new(f)
     };
-    run(reader, writer, opts.room).await?;
+    match args.action {
+        Action::ExportDanmu => {
+            export_danmu::run(reader, writer, args.room).await?;
+        }
+        Action::Popularity => {
+            real_popularity::run(reader, writer, args.room).await?;
+        }
+    }
 
     Ok(())
 }

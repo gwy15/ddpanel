@@ -5,11 +5,11 @@ use serde_json::Value;
 
 #[derive(Debug, Serialize)]
 pub struct DanmuMsg {
-    text: String,
-    user_id: u64,
-    username: String,
+    pub text: String,
+    pub user_id: u64,
+    pub username: String,
     #[serde(with = "chrono::serde::ts_milliseconds")]
-    time: DateTime<Utc>,
+    pub time: DateTime<Utc>,
 }
 
 impl<'de> Deserialize<'de> for DanmuMsg {
@@ -24,8 +24,8 @@ impl<'de> Deserialize<'de> for DanmuMsg {
             cmd: String,
             info: (
                 // 4. timestamp
-                (V, V, V, V, u64, V, V, V, V, V, V, V, V, V), // 0.
-                String,                                       // 1. msg
+                (V, V, V, V, u64, V, V, V, V, V, V, V, V, V, Option<V>), // 0.
+                String,                                                  // 1. msg
                 // uid, uname,
                 (u64, String, u64, u64, u64, u64, u64, String), // 2.
                 V,
