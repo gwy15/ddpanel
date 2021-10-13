@@ -57,7 +57,7 @@ impl Monitor {
                 Err(e) => {
                     warn!("发生错误：{:?}", e);
                     if Instant::now().duration_since(last_time) < ALLOW_FAIL_DURATION {
-                        warn!("错误发生过于频繁！");
+                        warn!("错误发生过于频繁！ err_counter = {}", err_counter);
                         err_counter += 1;
                         if err_counter > 5 {
                             error!("错误发生过于频繁！取消任务！");
@@ -95,7 +95,7 @@ impl Monitor {
                         .map_err(|_| anyhow!("Cannot send packet!"))?;
                 }
                 Err(e) => {
-                    error!("error: {:?}", e);
+                    error!("receive packet error: {:?}", e);
                     return Err(e.into());
                 }
             }

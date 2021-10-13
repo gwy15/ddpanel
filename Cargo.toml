@@ -3,7 +3,7 @@ name = "ddpanel"
 version = "0.1.0"
 authors = ["gwy15 <gwy15thu@gmail.com>"]
 edition = "2018"
-
+default-run = "ddpanel"
 
 [[bin]]
 name = "ddpanel-cli"
@@ -28,7 +28,7 @@ serde_json = "1.0.64"
 toml = "0.5.8"
 
 
-biliapi = "0.1.10-beta.4"
+biliapi = { version = "0.1.12", features = [ "live", "rustls", "live-rustls"] }
 # cookie 持久化
 cookie_store = "0.15.0"
 reqwest_cookie_store = "0.2.0"
